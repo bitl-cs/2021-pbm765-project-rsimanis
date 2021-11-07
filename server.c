@@ -22,13 +22,15 @@ void get_shared_memory();
 void gameloop();
 void start_network();
 void process_client(int id, int socket);
+int find_client_id();
+void remove_client(int id, int socket);
 
 int main(int argc, char **argv) {
     int len;
     char buf[20];
 
     if ((len = get_named_argument(0, argc, argv, buf)) < 0) {
-        printf("Must specify valid port number!\n");
+        printf("Must specify valid a port number!\n");
         return -1;
     }
 
@@ -41,7 +43,6 @@ int main(int argc, char **argv) {
     }
 
     int pid = 0;
-    int i;
     printf("SERVER started\n");
     get_shared_memory();
 
@@ -59,12 +60,15 @@ void get_shared_memory() {
     shared_memory = mmap(NULL, SHARED_MEMORY_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     client_count = (int*) shared_memory;
     shared_data = (int*) (shared_memory + sizeof(int));
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        shared_data[i] = -1;
+    }
 }
 
 void gameloop() {
     printf("Starting game loop! (It will run forever - use Ctrl+C)\n");
     while (1) {
-
+        // loop forever
     }
 }
 
@@ -102,14 +106,20 @@ void start_network() {
         int new_client_id = 0;
         int cpid = 0;
 
-        client_socket = accept(main_socket, (struct sockaddr*) &client_address, &client_address_size);
+        client_socket = accept(main_socket, (struct sockaddr*) &client_address, (socklen_t *) &client_address_size);
         if (client_socket < 0) {
             printf("Error accepting client connection! ERRNO=%d\n", errno);
             continue;
         }
 
-        new_client_id = *client_count;
+        new_client_id = find_client_id();
+        if (new_client_id == -1) {
+            printf("Limit for maximum clients is reached\n");
+            close(client_socket);
+            continue;
+        }
         *client_count += 1;
+        shared_data[new_client_id] = 0;
         cpid = fork();
 
         if (cpid == 0) {
@@ -122,7 +132,7 @@ void start_network() {
             else {
                 /* orphaning */
                 wait(NULL);
-                printf("Successfully orphaned client %d\n", new_client_id);
+                printf("Successfully orphaned client id=%d\n", new_client_id);
                 exit(0);
             }
         }
@@ -133,26 +143,58 @@ void start_network() {
 }
 
 void process_client(int id, int socket) {
-    int N = 0;
-    char c;
+    int N = 0, len;
+    char inputs[100], temp[1000];
     printf("Processing client id=%d, socket=%d\n", id, socket);
     printf("CLIENT count %d\n", *client_count);
 
     while (1) {
-        if (read(socket, &c, 1) == 1 && c != '\n') {
-            printf("received %c from client %d\n", c, id);
-            N++;
-            shared_data[id] = N;
-            for (int i = 0; i < N; i++) {
-                if (write(socket, &c, 1) != 1) {
-                    printf("sending failed\n");
-                    exit(1);
+        if ((len = recv(socket, inputs, 1, 0)) > 0) {
+            for (int i = 0; i < len; i++) {
+                char c = inputs[i];
+                if (c == '\n') {
+                    printf("Received \\n from client id=%d\n", id);
+                    send(socket, &c, 1, 0);
+                    printf("Char \\n sent to client id=%d\n", id);
                 }
-                printf("char %c sent\n", c);
+                else {
+                    printf("Received %c from client id=%d\n", c, id);
+                    N++;
+                    shared_data[id] = N;
+                    /* Buffering, since system calls are expensive.
+                    Note that we can run out of buffer space, so it should be adjusted carefully */
+                    for (int i = 0; i < N; i++) {
+                        temp[i] = c;
+                    }
+                    send(socket, temp, N, 0);
+                    printf("Char %c sent to client id=%d (%d times) \n", c, id, N);
+                }
             }
         }
-        else if (c == '\n') {
-            write(socket, &c, 1);
+        else if (len == 0) {
+            printf("Client id=%d disconnected\n", id);
+            remove_client(id, socket);
+            exit(0);
+        }
+        else {
+            printf("Error receiving data from client id=%d", id);
+            remove_client(id, socket);
+            exit(1);
         }
     }
+}
+
+int find_client_id() {
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (shared_data[i] == -1) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+void remove_client(int id, int socket) {
+    shared_data[id] = -1;
+    (*client_count)--;
+    close(socket);
 }

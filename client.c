@@ -11,25 +11,25 @@
 #include "args.h"
 
 void process_input(); /* called by input processing thread */
-void *process_response(void *vargp); /* called by response processing thread */
+void *process_response(); /* called by response processing thread */
 int validate_number(char *num);
 int validate_ip(char *ip);
 
-char HOST[30];
-int PORT = 0;
+char host[30];
+int port = 0;
 int my_socket = -1;
 
 int main(int argc, char **argv) {
 
     int len, i;
-    int aCount = 0, pCount = 0;
+    int a_count = 0, p_count = 0;
 
     char buf[30], name[30], val[30];
     for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
         get_arg_name_and_value(buf, len, name, val);
         if (strcmp(name, "-a") == 0) {
-            aCount++;
-            if (aCount > 1) {
+            a_count++;
+            if (a_count > 1) {
                 printf("Too many \"-a\" arguments\n");
                 return -1;
             }
@@ -37,17 +37,17 @@ int main(int argc, char **argv) {
                 printf("Invalid ip (%s)\n", val);
                 return -1;
             }
-            strcpy(HOST, val);
+            strcpy(host, val);
         }
         else if (strcmp(name, "-p") == 0) {
-            pCount++;
-            if (pCount > 1) {
+            p_count++;
+            if (p_count > 1) {
                 printf("Too many \"-p\" arguments\n");
                 return -1;
             }
-            PORT = atoi(val);
-            if (PORT < 1 || PORT > 65535) {
-                printf("Invalid port number (%d)\n", PORT);
+            port = atoi(val);
+            if (port < 1 || port > 65535) {
+                printf("Invalid port number (%d)\n", port);
                 return -1;
             }
         }
@@ -56,39 +56,41 @@ int main(int argc, char **argv) {
             return -1;
         }
     }
-    if (i != 2) {
-        printf("Some arguments are missing\n");
+    if (a_count == 0) {
+        printf("Need to specify client's IP address\n");
+        return -1;
+    }
+    if (p_count == 0) {
+        printf("Need to specify client's port number\n");
         return -1;
     }
 
-    pthread_t thread_id;
-    pthread_create(&thread_id, NULL, process_response, NULL);
 
-    process_input();
+    pthread_t thread_id;
+    if (pthread_create(&thread_id, NULL, process_response, NULL) != 0) {
+        printf("Error creating thread\n");
+        return -1;
+    }
+
+    // process input and send it to the server
+    char inputs[100];
+    while (1) {
+        if (my_socket != -1) {
+            fgets(inputs, 100, stdin);
+            send(my_socket, inputs, strlen(inputs), 0);
+        }
+    }
 
     return 0;
 } 
 
-void process_input() {
-    char inputs[100];
-
-    char c = 'z';
-    send(my_socket, &c, 1, 0);
-    while (1) {
-        if (my_socket != -1) {
-            scanf("%s", inputs);
-            send(my_socket, inputs, strlen(inputs), 0);
-        }
-    }
-}
-
-void *process_response(void *vargp) {
+void *process_response() {
     char *servername;
     struct sockaddr_in remote_address;
 
     remote_address.sin_family = AF_INET;
-    remote_address.sin_port = htons(PORT);
-    servername = gethostbyname(HOST);
+    remote_address.sin_port = htons(port);
+    servername = (char *) gethostbyname(host);
     inet_pton(AF_INET, servername, &remote_address.sin_addr);
 
     if ((my_socket = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -109,8 +111,13 @@ void *process_response(void *vargp) {
             for (int i = 0; i < len; i++) {
                 putchar(response[i]);
             }
+            fflush(stdout);
         }
-        else if (len < 0) {
+        else if (len == 0) {
+            printf("Server disconnected");
+            exit(0);
+        }
+        else {
             printf("reading error\n");
             exit(1);
         }
@@ -119,9 +126,11 @@ void *process_response(void *vargp) {
     return NULL;
 }
 
+
+/* --- EXTRA UTILITIES --- */
 /* code from https://www.tutorialspoint.com/c-program-to-validate-an-ip-address */
-/* assignment doc did not specify that we need to validate the ip address, but we decided to do it anyways. 
-Therefore, we used code from tutorialspoint.com (refence above) */
+/* Assignment document did not specify that we need to validate the ip address, but we decided to do it anyway. 
+However, since it was not specified, we did not code this ourselves, but rather took the code from tutorialspoint.com (refence above) */
 int validate_number(char *str) {
     while (*str) {
         if(!isdigit(*str)){ //if the character is not a number, return false
@@ -134,7 +143,7 @@ int validate_number(char *str) {
 
 /* code from https://www.tutorialspoint.com/c-program-to-validate-an-ip-address */
 int validate_ip(char *ip) { //check whether the IP is valid or not
-    int i, num, dots = 0;
+    int num, dots = 0;
     char copy[30];
 
     if (ip == NULL)
