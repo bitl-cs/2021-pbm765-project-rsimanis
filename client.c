@@ -108,9 +108,7 @@ void *process_response() {
 
     while (1) {
         if ((len = recv(my_socket, response, 100, 0)) > 0) {
-            for (int i = 0; i < len; i++) {
-                putchar(response[i]);
-            }
+            fwrite(response, 1, len, stdout);
             fflush(stdout);
         }
         else if (len == 0) {
