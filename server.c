@@ -22,20 +22,30 @@ void get_shared_memory();
 void gameloop();
 void start_network();
 void process_client(int id, int socket);
-int find_client_id();
 void remove_client(int id, int socket);
+int find_client_id();
 
 int main(int argc, char **argv) {
     int len;
     char buf[20];
 
-    if ((len = get_named_argument(0, argc, argv, buf)) < 0) {
-        printf("Must specify valid a port number!\n");
+    if (get_named_argument(1, argc, argv, buf) != -1 || get_unnamed_argument(1, argc, argv, buf) != -1) {
+        printf("Only one argument \"-p\" (port) allowed\n");
+        return -1;
+    }
+    if ((len = get_named_argument(0, argc, argv, buf)) == -1) {
+        printf("Missing \"-p\" (port) argument\n");
         return -1;
     }
 
     char name[20], val[20];
     get_arg_name_and_value(buf, len, name, val);
+
+    if (strcmp(name, "-p") != 0) {
+        printf("Only \"-p\" (port) argument allowed\n");
+        return -1;
+    }
+
     PORT = atoi(val);
     if (PORT < 1 || PORT > 65535) {
         printf("Invalid port number (%d)\n", PORT);
