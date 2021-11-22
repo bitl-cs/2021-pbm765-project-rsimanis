@@ -16,9 +16,8 @@ int encode(char *data, char *buf, size_t len, size_t buflen) {
             buf[buf_i++] = '?';
             buf[buf_i++] = '*';
         }
-        else {
+        else
             buf[buf_i++] = data[i];
-        }
     }
     return buf_i;
 }
@@ -34,23 +33,18 @@ int decode(char *data, char *buf, size_t len, size_t buflen) {
         if (data[i] == '?') {
             if (i < len - 1) {
                 next = data[++i];
-                if (next == '-') {
+                if (next == '-')
                     buf[buf_i++] = '-';
-                }
-                else if (next == '*') {
+                else if (next == '*')
                     buf[buf_i++] = '?';
-                }
-                else {
+                else
                     return -2;
-                }
             }
-            else {
+            else
                 return -2;
-            }
         }
-        else {
+        else
             buf[buf_i++] = data[i];
-        }
     }
     return buf_i;
 }
@@ -63,9 +57,8 @@ char xor_checksum(char *data, size_t len) {
         return -1;
 
     rez = data[0];
-    for (i = 1; i < len; i++) {
+    for (i = 1; i < len; i++)
         rez ^= data[i];
-    }
     return rez;
 }
 
