@@ -61,6 +61,11 @@ int main(int argc, char **argv) {
         start_network();
     }
     else {
+        /* vairaki threadi ar gameloop (katrai spēlei savs)*/
+        /* checko queue */
+        /* ja queue ir 2 speletaji */
+        /* uztaisa game state kasti */
+        /* uztaisa threadu kas laiz gameloop uz tas kastes */
         gameloop();
     }
     return 0;
@@ -100,7 +105,7 @@ void start_network() {
     server_address.sin_addr.s_addr = INADDR_ANY;
     server_address.sin_port = htons(PORT);
 
-    if (bind(main_socket,(struct sockaddr*)&server_address, sizeof(server_address)) < 0) {
+    if (bind(main_socket,(struct sockaddr *)&server_address, sizeof(server_address)) < 0) {
         printf("Error binding the main server socket!\n");
         exit(1);
     }
@@ -116,7 +121,7 @@ void start_network() {
         int new_client_id = 0;
         int cpid = 0;
 
-        client_socket = accept(main_socket, (struct sockaddr*) &client_address, (socklen_t *) &client_address_size);
+        client_socket = accept(main_socket, (struct sockaddr *) &client_address, (socklen_t *) &client_address_size);
         if (client_socket < 0) {
             printf("Error accepting client connection! ERRNO=%d\n", errno);
             continue;
@@ -153,6 +158,7 @@ void start_network() {
 }
 
 void process_client(int id, int socket) {
+    /* 2 threads */
     int N = 0, len;
     char inputs[100], temp[1000];
     printf("Processing client id=%d, socket=%d\n", id, socket);
