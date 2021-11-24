@@ -19,18 +19,47 @@ void show_int(int x) {
     show_bytes((byte_pointer) &x, sizeof(int)); //line:data:show_bytes_amp1
 }
 
-int main() {
-    send_join("abcd", 2, 0);
-    send_join("Mr. ?Rozkalns-", 2, 0);
-    char name[] = "Mr. Rozkalns";
-    send_join(name, 2, 0);
-    send_join("Mr. Rozkalnsasdfjasjdfkljasdflkjadfj", 2, 0);
-    char name2[] = "Mr. Rozkalnsasdfasdfasdfasdfasdfa";
-    send_join(name2, 2, 0);
+void show_long(long x) {
+    show_bytes((byte_pointer) &x, sizeof(long)); //line:data:show_bytes_amp1
+}
 
-    send_join("--?--", 2, 0);
-    send_join("", 2, 0);
-    send_join("a", 2, 0);
-    send_join("ab", 2, 0);
+void print_arr(char *start, size_t len) {
+    size_t i;
+
+    for (i = 0; i < len; i++) {
+        printf("%c ", start[i]);
+    }
+    putchar('\n');
+}
+
+int main() {
+    // send_join("abcd", 2, 0);
+    // send_join("????????????????????????????", 2, 0);
+    // char name[] = "Mr. Rozkalns";
+    // send_join(name, 2, 0);
+    // send_join("Mr. Rozkalnsasdfjasjdfkljasdflkjadfj", 2, 0);
+    // char name2[] = "Mr. Rozkalnsasdfasdfasdfasdfasdfa";
+    // send_join(name2, 2, 0);
+
+    // send_join("--?--", 2, 0);
+    // send_join("", 2, 0)char *name
+    // send_join("a", 2, 0);
+    // send_join("ab", 2, 0);
+
+    // send_lobby(0, NULL, 2, 0);
+    // send_lobby(0, "adsfasdf", 2, 0);
+    // send_lobby(1, "adsfasdf", 2, 0);
+    // send_lobby(1, "", 2, 0);
+    // send_lobby(1, "asd-asdf?-asdf--", 2, 0);
+    // send_lobby(1, "012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678", 2, 0);
+    // send_lobby(1, "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789", 2, 0);
+    // send_lobby(1, "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890", 2, 0);
+    // send_lobby(1, "0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678912345690", 2, 0);
+    // send_lobby(1, "?", 4 , 0);
+    // send_lobby(1, "??????????", 8, 0);
+    // send_lobby(1, "abcd", 2, 0);
+
+    send_player_ready(1, 0);
+
     return 0;
 }
