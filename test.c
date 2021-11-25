@@ -1,6 +1,7 @@
 #include "packets.h"
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 typedef unsigned char *byte_pointer;
 
@@ -59,7 +60,18 @@ int main() {
     // send_lobby(1, "??????????", 8, 0);
     // send_lobby(1, "abcd", 2, 0);
 
-    send_player_ready(1, 0);
+    // send_player_ready(1, 0);
+
+    int *a = (int *) malloc(sizeof(int));
+    *a = 1;
+    printf("%d\n", *a);
+    print_bytes((char *) a, sizeof(int));
+    *a = network_to_host_int(1);
+    printf("%d\n", *a);
+    print_bytes((char *) a, sizeof(int));
+
+
 
     return 0;
 }
+

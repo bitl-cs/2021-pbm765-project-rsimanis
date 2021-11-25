@@ -28,22 +28,24 @@
 #define PACKET_MAX_ERROR_MESSAGE_SIZE       100
 
 /* specific */
+#define CLIENT_PACKET_MAX_SIZE              (PACKET_HEADER_SIZE + CLIENT_PACKET_MAX_DATA_SIZE)
 #define CLIENT_PACKET_MAX_DATA_SIZE         JOIN_PACKET_DATA_SIZE
+#define SERVER_PACKET_MAX_SIZE              (PACKET_HEADER_SIZE + SERVER_PACKET_MAX_DATA_SIZE)
 #define SERVER_PACKET_MAX_DATA_SIZE         GAME_STATE_PACKET_MAX_DATA_SIZE
 
 #define JOIN_PACKET_SIZE                    (PACKET_HEADER_SIZE + JOIN_PACKET_DATA_SIZE)
 #define JOIN_PACKET_DATA_SIZE               MAX_NAME_SIZE
 
-#define LOBBY_PACKET_SIZE                   (PACKET_HEADER_SIZE + LOBBY_PACKET_DATA_SIZE)
-#define LOBBY_PACKET_MAX_DATA_SIZE              (PACKET_STATUS_SIZE + PACKET_MAX_ERROR_MESSAGE_SIZE)
+#define LOBBY_PACKET_SIZE                   (PACKET_HEADER_SIZE + LOBBY_PACKET_MAX_DATA_SIZE)
+#define LOBBY_PACKET_MAX_DATA_SIZE          (PACKET_STATUS_SIZE + PACKET_MAX_ERROR_MESSAGE_SIZE)
  
 #define GAME_TYPE_PACKET_SIZE               (PACKET_HEADER_SIZE + GAME_TYPE_PACKET_DATA_SIZE)
 #define GAME_TYPE_PACKET_DATA_SIZE          PACKET_GAME_TYPE_SIZE
  
-#define PLAYER_QUEUE_PACKET_SIZE            (PACKET_HEADER_SIZE + PLAYER_QUEUE_PACKET_DATA_SIZE)
+#define PLAYER_QUEUE_PACKET_SIZE            (PACKET_HEADER_SIZE + PLAYER_QUEUE_PACKET_MAX_DATA_SIZE)
 #define PLAYER_QUEUE_PACKET_MAX_DATA_SIZE   (PACKET_STATUS_SIZE + PACKET_MAX_ERROR_MESSAGE_SIZE)
  
-#define GAME_READY_PACKET_SIZE              (PACKET_HEADER_SIZE + GAME_READY_PACKET_DATA_SIZE)
+#define GAME_READY_PACKET_SIZE              (PACKET_HEADER_SIZE + GAME_READY_PACKET_MAX_DATA_SIZE)
 #define GAME_READY_PACKET_MAX_DATA_SIZE     (PACKET_STATUS_SIZE + PACKET_MAX_ERROR_MESSAGE_SIZE)
  
 #define PLAYER_READY_PACKET_SIZE            (PACKET_HEADER_SIZE + PLAYER_READY_PACKET_DATA_SIZE)
@@ -52,13 +54,13 @@
 #define GAME_STATE_PACKET_SIZE              (PACKET_HEADER_SIZE + GAME_STATE_PACKET_MAX_DATA_SIZE)
 #define GAME_STATE_PACKET_MAX_DATA_SIZE     GAMEBOARD_STATE_SIZE
 
-#define PLAYER_INPUT_PACKET_SIZE            (PACKET_HEADER_SIZE + INPUT_PACKET_DATA_SIZE)
+#define PLAYER_INPUT_PACKET_SIZE            (PACKET_HEADER_SIZE + PLAYER_INPUT_PACKET_DATA_SIZE)
 #define PLAYER_INPUT_PACKET_DATA_SIZE       KEYBOARD_INPUT_SIZE
 
 #define CHECK_STATUS_PACKET_SIZE            (PACKET_HEADER_SIZE + CHECK_STATUS_PACKET_DATA_SIZE)
 #define CHECK_STATUS_PACKET_DATA_SIZE       0
 
-#define GAME_END_PACKET_SIZE                (PACKET_HEADER_SIZE + GAME_TYPE_PACKET_DATA_SIZE)
+#define GAME_END_PACKET_SIZE                (PACKET_HEADER_SIZE + GAME_TYPE_PACKET_MAX_DATA_SIZE)
 #define GAME_END_PACKET_MAX_DATA_SIZE       GAME_STATISTICS_SIZE
 
 /* global constants */
@@ -78,19 +80,20 @@ void send_game_ready(int status, char *error, int32_t pn, int socket);
 void process_game_ready(void *data);
 void send_player_ready(int32_t pn, int socket);
 void process_player_ready();
-void send_game_state(game_state *gs, int32_t pn, int socket);
+void send_game_state(void *game_state, int32_t pn, int socket);
 void process_game_state(void *data);
 void send_player_input(char input, int32_t pn, int socket);
 void process_player_input(void *data);
 void send_check_status(int32_t pn, int socket);
 void process_check_status();
-void send_game_end(int status, char *error, game_statistics *gs, int32_t pn, int socket);
+void send_game_end(int status, char *error, void *game_statistics, int32_t pn, int socket);
 void process_game_end(void *data);
 
 /* utilities */
 int encode(char *data, size_t datalen, char *buf, size_t buflen);
 int decode(char *data, size_t datalen, char *buf, size_t buflen);
 char xor_checksum(char *data, size_t len);
+int verify_packet(char *packet, int *current_pn, long decoded_size);
 
 /* debug */
 void print_bytes(char *start, size_t len);

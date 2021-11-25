@@ -16,33 +16,33 @@ void send_packet(int32_t pn, int32_t pid, char *data, size_t datalen, size_t pac
 
     /* add packet number */
     offset += insert_int32_t(host_to_network_int32_t(pn), packet, sizeof(packet), offset);
-    print_bytes(packet, offset);
+    // print_bytes(packet, offset);
 
     /* add packet id */
     offset += insert_int32_t(host_to_network_int32_t(pid), packet, sizeof(packet), offset);
-    print_bytes(packet, offset);
+    // print_bytes(packet, offset);
 
     /* add the size of data segment */
     offset += insert_int64_t(host_to_network_int64_t(packet_data_size), packet, sizeof(packet), offset);
-    print_bytes(packet, offset);
+    // print_bytes(packet, offset);
 
     /* add checksum */
     offset += insert_char(xor_checksum(data, datalen), packet, sizeof(packet), offset);
-    print_bytes(packet, offset);
+    // print_bytes(packet, offset);
 
     /* add data */
     offset += insert_bytes(data, datalen, packet, sizeof(packet), offset);
-    print_bytes(packet, offset);
+    // print_bytes(packet, offset);
 
     /* fill the unused data segment with null bytes */
     offset += insert_null_bytes(packet_data_size - offset + PACKET_HEADER_SIZE, packet, sizeof(packet), offset);
-    print_bytes(packet, offset);
-    printf("%lu\n", offset);
+    // print_bytes(packet, offset);
+    // printf("%lu\n", offset);
 
     /* encode */
     offset = encode(packet, offset, final_packet, sizeof(final_packet));
-    print_bytes(final_packet, offset);
-    printf("%lu\n", offset);
+    // print_bytes(final_packet, offset);
+    // printf("%lu\n", offset);
 
     /* add separator */
     offset += insert_separator(final_packet, sizeof(final_packet), offset);
@@ -53,10 +53,11 @@ void send_packet(int32_t pn, int32_t pid, char *data, size_t datalen, size_t pac
     // putchar('\n');
 
     /* send packet to socket */ 
-    // send(socket, final_packet, offset, 0);
+    send(socket, final_packet, offset, 0);
 }
 
 void send_join(char *name, int32_t pn, int socket) {
+    printf("sent join\n");
     /* check if the name exceeds the limit */
     size_t namelen = strlen(name);
     if (namelen > MAX_NAME_SIZE - 1)
@@ -66,10 +67,11 @@ void send_join(char *name, int32_t pn, int socket) {
 }
 
 void process_join(void *data) {
-
+    printf("received join\n");
 }
 
 void send_lobby(int status, char *error, int32_t pn, int socket) {
+    printf("sent lobby\n");
     char data[LOBBY_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -89,10 +91,13 @@ void send_lobby(int status, char *error, int32_t pn, int socket) {
 }
  
 void process_lobby(void *data){
- 
+    printf("received lobby\n");
+    print_bytes(data, LOBBY_PACKET_MAX_DATA_SIZE);
+    putchar('\n');
 }
 
 void send_game_type(int type, int32_t pn, int socket){
+    printf("sent game_type\n");
     char data[GAME_TYPE_PACKET_DATA_SIZE];
     size_t offset = 0;
 
@@ -100,7 +105,10 @@ void send_game_type(int type, int32_t pn, int socket){
     send_packet(pn, 3, data, offset, GAME_TYPE_PACKET_DATA_SIZE, socket);
 }
  
-void processs_game_type(void *data) {
+void process_game_type(void *data) {
+    printf("received game_type\n");
+    print_bytes(data, GAME_TYPE_PACKET_DATA_SIZE);
+    putchar('\n');
  
 }
 
@@ -121,14 +129,17 @@ void send_player_queue(int status, char *error, int32_t pn, int socket) {
     else {
         send_packet(pn, 4, data, offset, PACKET_STATUS_SIZE, socket);
     }
+    printf("sent player_queue\n");
+
 }
 
 void process_player_queue(void *data) {
+    printf("received player_queue\n");
 
 }
 
 void send_game_ready(int status, char *error, int32_t pn, int socket) {
-    char data[GAME_STATE_PACKET_MAX_DATA_SIZE];
+    char data[GAME_READY_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
     offset += insert_int32_t(host_to_network_int32_t((int32_t) status), data, sizeof(data), offset);
@@ -139,30 +150,42 @@ void send_game_ready(int status, char *error, int32_t pn, int socket) {
             error_len = PACKET_MAX_ERROR_MESSAGE_SIZE - 1;
 
         offset += insert_str(error, error_len, data, sizeof(data), offset);
-        send_packet(pn, 5, data, offset, GAME_STATE_PACKET_MAX_DATA_SIZE, socket);
+        send_packet(pn, 5, data, offset, GAME_READY_PACKET_MAX_DATA_SIZE, socket);
     } 
     else {
         send_packet(pn, 5, data, offset, PACKET_STATUS_SIZE, socket);
     }
+    printf("sent game_ready\n");
 }
 
 void process_game_ready(void *data) {
+    printf("received game_ready\n");
 
 }
 
 void send_player_ready(int32_t pn, int socket) {
     send_packet(pn, 6, NULL, 0, PLAYER_READY_PACKET_DATA_SIZE, socket);
+    printf("sent player_ready\n");
 }
 
 void process_player_ready() {
+    printf("received player_ready\n");
 
 }
 
-void send_game_state(game_state *gs, int pn, int socket) {
+void send_game_state(void *game_state, int32_t pn, int socket) {
+    char data[GAME_STATE_PACKET_MAX_DATA_SIZE];
+    size_t offset = 0;
 
+    /* fix endianess */
+
+    offset += insert_bytes(game_state, GAMEBOARD_STATE_SIZE, data, sizeof(data), offset);
+    send_packet(pn, 7, data, offset, GAME_STATE_PACKET_MAX_DATA_SIZE, socket);
+    printf("sent game_state\n");
 }
 
 void process_game_state(void *data) {
+    printf("received game_state\n");
 
 }
 
@@ -172,25 +195,49 @@ void send_player_input(char input, int pn, int socket) {
 
     offset += insert_char(input, data, sizeof(data), offset);
     send_packet(pn, 8, data, offset, PLAYER_INPUT_PACKET_DATA_SIZE, socket);
+    printf("sent player_input\n");
 }
 
 void process_player_input(void *data) {
+    printf("received player_input\n");
 
 }
 
 void send_check_status(int pn, int socket) {
     send_packet(pn, 9, NULL, 0, CHECK_STATUS_PACKET_DATA_SIZE, socket);
+    printf("sent check_status\n");
 }
 
 void process_check_status() {
+    printf("received check_status\n");
 
 }
 
-void send_game_end(int status, char *error, game_statistics *gs, int pn, int socket) {
+/* UPDATE: takes pointer to char arrays containing name */
+/* game statistics data follows immediatelly after game_statistics pointer in the same order as it is defined in API doc */
+void send_game_end(int status, char *error, void *game_statistics, int pn, int socket) {
+    char data[GAME_END_PACKET_MAX_DATA_SIZE];
+    size_t offset = 0;
 
+    offset += insert_int32_t(host_to_network_int32_t((int32_t) status), data, sizeof(data), offset);
+    if (error != NULL && status == 1) {
+        /* check if the error exceeds the limit */
+        size_t error_len = strlen(error);
+        if(error_len > PACKET_MAX_ERROR_MESSAGE_SIZE - 1)
+            error_len = PACKET_MAX_ERROR_MESSAGE_SIZE - 1;
+
+        offset += insert_str(error, error_len, data, sizeof(data), offset);
+        send_packet(pn, 10, data, offset, GAME_END_PACKET_MAX_DATA_SIZE, socket);
+    } 
+    else {
+        offset += insert_bytes(game_statistics, GAME_STATISTICS_SIZE, data, sizeof(data), offset);
+        send_packet(pn, 10, data, offset, PACKET_STATUS_SIZE, socket);
+    }
+    printf("sent game_end\n");
 }
 
 void process_game_end(void *data) {
+    printf("received game_end\n");
 
 }
 
@@ -233,11 +280,11 @@ int decode(char *data, size_t datalen, char *buf, size_t buflen) {
                     buf[buf_i++] = '-';
                 else if (next == '*')
                     buf[buf_i++] = '?';
-                else
-                    return -2;
+                else 
+                    break;
             }
             else
-                return -2;
+                break;
         }
         else
             buf[buf_i++] = data[i];
@@ -258,6 +305,25 @@ char xor_checksum(char *data, size_t len) {
     return rez;
 }
 
+int verify_packet(char *packet, int *current_pn, long decoded_size) {
+    int32_t *recv_pn = (int32_t *) packet;
+    int64_t *recv_data_size = (int64_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
+    char *recv_checksum = packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE;
+    char *data = packet + PACKET_HEADER_SIZE;
+
+    // printf("recv_pn: %d\n", *recv_pn);
+    // printf("current_pn: %d\n", *current_pn);
+    if (*recv_pn < *current_pn)
+        return 0;
+
+    if (*recv_data_size != decoded_size - PACKET_HEADER_SIZE)
+        return 0;
+
+    if (*recv_checksum != xor_checksum(data, *recv_data_size))
+        return 0;
+
+    return 1;
+}
 
 /* debug */
 void print_bytes(char *start, size_t len) {
