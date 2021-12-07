@@ -1,23 +1,19 @@
 #ifndef _PACKETS_H
 #define _PACKETS_H
 
+#include "pong_game.h"
+
 #include <inttypes.h>
 #include <stddef.h>
 #include <limits.h>
-#include "pong.h"
 
 
-/* game */
-#define MAX_NAME_SIZE                       20
-#define KEYBOARD_INPUT_SIZE                 1
-#define GAME_STATISTICS_SIZE                112
-#define GAMEBOARD_STATE_SIZE                176
-#define GAME_STATE_SIZE                     GAMEBOARD_STATE_SIZE + 0 /* ?????? */
+#define MAX_CLIENTS                         1
 
 /* general */
 #define PACKET_NUMBER_SIZE                  4
 #define PACKET_ID_SIZE                      4
-#define PACKET_SIZE_SIZE                    8
+#define PACKET_SIZE_SIZE                    4
 #define PACKET_CHECKSUM_SIZE                1
 #define PACKET_HEADER_SIZE                  (PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE + PACKET_CHECKSUM_SIZE)
 #define PACKET_SEPARATOR_SIZE               2
@@ -55,7 +51,7 @@
 #define GAME_STATE_PACKET_MAX_DATA_SIZE     GAMEBOARD_STATE_SIZE
 
 #define PLAYER_INPUT_PACKET_SIZE            (PACKET_HEADER_SIZE + PLAYER_INPUT_PACKET_DATA_SIZE)
-#define PLAYER_INPUT_PACKET_DATA_SIZE       KEYBOARD_INPUT_SIZE
+#define PLAYER_INPUT_PACKET_DATA_SIZE       INPUT_SIZE
 
 #define CHECK_STATUS_PACKET_SIZE            (PACKET_HEADER_SIZE + CHECK_STATUS_PACKET_DATA_SIZE)
 #define CHECK_STATUS_PACKET_DATA_SIZE       0
@@ -64,29 +60,37 @@
 #define GAME_END_PACKET_MAX_DATA_SIZE       GAME_STATISTICS_SIZE
 
 /* global constants */
-static const char *PACKET_SEPARATOR = "--";
+#define DEFAULT_PORT        "12345"
+#define DEFAULT_IP          "127.0.0.1"
+#define PACKET_SEPARATOR    "--"
+
+/* intialization */
+int get_host_parameter(int argc, char **argv, char *host);
+int get_port_parameter(int argc, char **argv, char *port);
+int get_server_socket(char *port);
+int get_client_socket(char *host, char *port);
 
 /* packet processing */
-void send_packet(int32_t pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket);
-void send_join(char *name, int32_t pn, int socket);
+void send_packet(int pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket);
+void send_join(char *name, int pn, int socket);
 void process_join(void *data);
-void send_lobby(int status, char *error, int32_t pn, int socket);
+void send_lobby(int status, char *error, int pn, int socket);
 void process_lobby(void *data);
-void send_game_type(int type, int32_t pn, int socket);
+void send_game_type(int type, int pn, int socket);
 void process_game_type(void *data);
-void send_player_queue(int status, char *error, int32_t pn, int socket);
+void send_player_queue(int status, char *error, int pn, int socket);
 void process_player_queue(void *data);
-void send_game_ready(int status, char *error, int32_t pn, int socket);
+void send_game_ready(int status, char *error, int pn, int socket);
 void process_game_ready(void *data);
-void send_player_ready(int32_t pn, int socket);
+void send_player_ready(int pn, int socket);
 void process_player_ready();
-void send_game_state(void *game_state, int32_t pn, int socket);
+void send_game_state(void *game_state, int pn, int socket);
 void process_game_state(void *data);
-void send_player_input(char input, int32_t pn, int socket);
+void send_player_input(char input, int pn, int socket);
 void process_player_input(void *data);
-void send_check_status(int32_t pn, int socket);
+void send_check_status(int pn, int socket);
 void process_check_status();
-void send_game_end(int status, char *error, void *game_statistics, int32_t pn, int socket);
+void send_game_end(int status, char *error, void *game_statistics, int pn, int socket);
 void process_game_end(void *data);
 
 /* utilities */
@@ -96,8 +100,8 @@ char xor_checksum(char *data, size_t len);
 int verify_packet(char *packet, int *current_pn, long decoded_size);
 
 /* debug */
-void print_bytes(char *start, size_t len);
-void print_bytes_full(char *start, size_t len);
+void print_bytes(void *start, size_t len);
+void print_bytes_full(void *start, size_t len);
 
 /* helpers */
 size_t insert_bytes(char *data, size_t datalen, char *buf, size_t buflen, size_t offset);
@@ -128,5 +132,9 @@ int64_t network_to_host_int64_t(int64_t x);
 
 int is_little_endian_system();
 char printable_char(char c);
+
+/* extra utilities */
+int validate_number(char *str);
+int validate_ip(char *str);
 
 #endif

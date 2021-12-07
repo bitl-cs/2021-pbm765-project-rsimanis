@@ -9,7 +9,7 @@
 #include <ctype.h>
 #include <pthread.h>
 #include "args.h"
-#include "packets.h"
+#include "pong_networking.h"
 
 #define VALIDITY_BYTE_SIZE      1
 #define SHARED_RECV_BUF_SIZE    SERVER_PACKET_MAX_SIZE

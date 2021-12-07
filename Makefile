@@ -5,8 +5,8 @@ CLIENT_PROGRAM = client.c
 CLIENT_EXECUTABLE = client
 
 CFLAGS = -std=gnu11 -fno-common -Wall -Wextra
-CFILES_SERVER = $(SERVER_PROGRAM) args.c packets.c -lpthread
-CFILES_CLIENT = $(CLIENT_PROGRAM) args.c packets.c -lpthread
+CFILES_SERVER = $(SERVER_PROGRAM) args.c pong_server.c pong_networking.c pong_math.c pong_game.c -lpthread
+CFILES_CLIENT = $(CLIENT_PROGRAM) args.c pong_client.c pong_networking.c pong_math.c pong_game.c -lpthread
 
 all: $(SERVER_EXECUTABLE) $(CLIENT_EXECUTABLE)
 

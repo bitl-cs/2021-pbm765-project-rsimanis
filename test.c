@@ -1,4 +1,5 @@
-#include "packets.h"
+#include "pong_networking.h"
+#include "pong_server.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,14 @@ void print_arr(char *start, size_t len) {
     putchar('\n');
 }
 
+struct test_str {
+    char taken;
+};
+
+void update(struct test_str *ts) {
+    ts->taken = '2';
+}
+
 int main() {
     // send_join("abcd", 2, 0);
     // send_join("????????????????????????????", 2, 0);
@@ -62,13 +71,11 @@ int main() {
 
     // send_player_ready(1, 0);
 
-    int *a = (int *) malloc(sizeof(int));
-    *a = 1;
-    printf("%d\n", *a);
-    print_bytes((char *) a, sizeof(int));
-    *a = network_to_host_int(1);
-    printf("%d\n", *a);
-    print_bytes((char *) a, sizeof(int));
+    char buf[10];
+    memset(buf, 0, 10);
+    print_bytes(buf, 10);
+    insert_separator(buf, 10, 0);
+    print_bytes(buf, 10);
 
 
 

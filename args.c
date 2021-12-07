@@ -22,8 +22,7 @@ void str_copy(char* source, char* destination)
 
 int str_find(char* needle, char* haystack)
 {
-	int nlen, hlen, i, j;
-	bool match;
+	int nlen, hlen, i, j, match = 0;
 
 	nlen = str_length(needle);
 	hlen = str_length(haystack);
@@ -32,10 +31,10 @@ int str_find(char* needle, char* haystack)
 		return -1;
 
 	for (i = 0; i <= hlen - nlen; i++) {
-		match = true;
+		match = 1;
 		for (j = i; j < i + nlen; j++) {
 			if (haystack[j] != needle[j - i]) {
-				match = false;
+				match = 0;
 				break;
 			}
 		}

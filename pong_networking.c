@@ -1,29 +1,187 @@
-#include "packets.h"
+#include "pong_networking.h"
+#include "args.h"
+
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <netdb.h>
+#include <errno.h>
+
+
+/* initialization */
+int get_port_parameter(int argc, char** argv, char* port){
+    /* This function either leaves the port string as is (Should be set to DEFAULT_PORT), or changes it, if parameter -p=NEWPORT is set */
+    int len, i, count;
+    char buf[30], name[30], val[30];
+
+    count = 0;
+    for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
+        get_arg_name_and_value(buf, len, name, val);
+        if (strcmp(name, "-p") == 0) {
+            count++;
+            if (count > 1) {
+                printf("Too many \"-p\" arguments\n");
+                return -1;
+            }
+            int portnr = atoi(val);
+            if (portnr < 1 || portnr > 65535) {
+                printf("Invalid port (%d)\n", portnr);
+                return -1;
+            }
+            strcpy(port, val);
+        }
+        else {
+            printf("Undefined argument (%s)\n", name);
+            return -1;
+        }
+    }
+    if (count == 0)
+        return -1;
+    return 0;
+}
+
+int get_host_parameter(int argc, char** argv, char* host){
+    /* This function either leaves the host string as is (Should be set to DEFAULT_IP), or changes it, if parameter -h=NEWHOST is set */
+    int len, i, count;
+    char buf[30], name[30], val[30];
+
+    count = 0;
+    for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
+        get_arg_name_and_value(buf, len, name, val);
+        if (strcmp(name, "-a") == 0) {
+            count++;
+            if (count > 1) {
+                printf("Too many \"-a\" arguments\n");
+                return -1;
+            }
+            if (!validate_ip(val)) {
+                printf("Invalid ip (%s)\n", val);
+                return -1;
+            }
+            strcpy(host, val);
+        }
+        else {
+            printf("Undefined argument (%s)\n", name);
+            return -1;
+        }
+    }
+    if (count == 0)
+        return -1;
+    return 0;
+}
+
+int get_server_socket(char *port){
+    int server_socket;
+    int opt_value = 1;
+    struct addrinfo hints, *list_of_addresses, *a;
+
+    printf("Opening server socket on port %s\n", port);
+    memset(&hints, 0, sizeof(struct addrinfo));  /* create empty hints structure */
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;  /* protocol independent stream */
+    hints.ai_flags = AI_PASSIVE; /* passive sockets - server */
+
+    if (getaddrinfo(NULL, port, &hints, &list_of_addresses) != 0) {
+        printf("Port translating failed!\n");
+        return -1;
+    }
+    if(list_of_addresses == NULL) 
+        printf("NO valid addresses!\n");
+
+    /* Iterate over all addresses available to the server and try to connect/bind */
+    for(a = list_of_addresses; a != NULL; a = a->ai_next) {
+        printf("... Creating socket ...\n");
+        if((server_socket = socket(a->ai_family, a->ai_socktype, a->ai_protocol)) < 0)
+            continue; /* failed on this address, try another one */
+
+        /* get rid of "Address already in use" produced by previous bind() calls */
+        setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, (const void *) &opt_value, sizeof(int));
+        setsockopt(server_socket, SOL_SOCKET, SO_REUSEPORT, (const void *) &opt_value, sizeof(int));
+        printf("... Binding socket ...\n");
+        if(bind(server_socket, a->ai_addr, a->ai_addrlen) == 0)
+            break; /* successfully connected */
+        printf("ERROR binding server! ERRNO=%d\n", errno);
+        close(server_socket); /* could not connect to socket - close and try another one */
+    }
+
+    /* clean up */
+    if (a == NULL) { /* All connections failed */
+        printf("No connection was made - cleaning up...\n");
+        freeaddrinfo(list_of_addresses);
+        return -1;
+    } 
+    freeaddrinfo(list_of_addresses);
+
+    /* start listening to the socket */
+    printf("... Listening to socket ...\n");
+    if (listen(server_socket, MAX_CLIENTS) < 0){
+        close(server_socket);
+        return -1;
+    }
+    printf("Server socket successfully opened - listening...\n");
+    return server_socket; /* a connection succeeded, so return */
+}
+
+int get_client_socket(char *host, char *port){
+    int client_socket = -1;
+    struct addrinfo hints, *list_of_addresses, *a;
+
+    printf("Opening client socket to %s:%s\n", host, port);
+    memset(&hints, 0, sizeof(struct addrinfo));  /* create empty hints structure */
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;  /* protocol independent stream */
+
+    if (getaddrinfo(host, port, &hints, &list_of_addresses) != 0) {
+        printf("Host and port translating failed!\n");
+        return -1;
+    }
+    if (list_of_addresses == NULL)
+        printf("NO valid addresses!\n");
+
+    /* Iterate over all addresses available to the server and try to connect/bind */
+    for (a = list_of_addresses; a != NULL; a = a->ai_next) {
+        printf("... Creating socket ...\n");
+        if((client_socket = socket(a->ai_family, a->ai_socktype, a->ai_protocol))<0)
+            continue; /* failed on this address, try another one */
+        if(connect(client_socket, a->ai_addr, a->ai_addrlen)!=-1)
+            break; /* successfully connected */
+        printf("ERROR conneting to socket! ERRNO=%d\n", errno);
+        close(client_socket); /* could not connect to socket - close and try another one */
+    }
+
+    /* clean up */
+    if(a == NULL) { /* All connections failed */
+        printf("No connection was made - cleaning up...\n");
+        freeaddrinfo(list_of_addresses);
+        return -1;
+    } 
+    freeaddrinfo(list_of_addresses);
+    return client_socket;
+}
 
 
 /* packet processing */
-
-/* send generic packet */
-/* data must already be in correct endianess */
-void send_packet(int32_t pn, int32_t pid, char *data, size_t datalen, size_t packet_data_size, int socket) {
+/* send generic packet (data must be in network endianess) */
+void send_packet(int pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket) {
     char packet[PACKET_MAX_SIZE];
     char final_packet[2 * PACKET_MAX_SIZE + PACKET_SEPARATOR_SIZE]; /* assume that all characters in array "packet" could get encoded */ 
     size_t offset = 0;
 
     /* add packet number */
-    offset += insert_int32_t(host_to_network_int32_t(pn), packet, sizeof(packet), offset);
+    offset += insert_int32_t(host_to_network_int32_t((int32_t) pn), packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* add packet id */
-    offset += insert_int32_t(host_to_network_int32_t(pid), packet, sizeof(packet), offset);
+    offset += insert_int32_t(host_to_network_int32_t((int32_t) pid), packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* add the size of data segment */
-    offset += insert_int64_t(host_to_network_int64_t(packet_data_size), packet, sizeof(packet), offset);
+    offset += insert_int32_t(host_to_network_int32_t(packet_data_size), packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* add checksum */
@@ -56,7 +214,7 @@ void send_packet(int32_t pn, int32_t pid, char *data, size_t datalen, size_t pac
     send(socket, final_packet, offset, 0);
 }
 
-void send_join(char *name, int32_t pn, int socket) {
+void send_join(char *name, int pn, int socket) {
     printf("sent join\n");
     /* check if the name exceeds the limit */
     size_t namelen = strlen(name);
@@ -70,7 +228,7 @@ void process_join(void *data) {
     printf("received join\n");
 }
 
-void send_lobby(int status, char *error, int32_t pn, int socket) {
+void send_lobby(int status, char *error, int pn, int socket) {
     printf("sent lobby\n");
     char data[LOBBY_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
@@ -96,7 +254,7 @@ void process_lobby(void *data){
     putchar('\n');
 }
 
-void send_game_type(int type, int32_t pn, int socket){
+void send_game_type(int type, int pn, int socket){
     printf("sent game_type\n");
     char data[GAME_TYPE_PACKET_DATA_SIZE];
     size_t offset = 0;
@@ -112,7 +270,7 @@ void process_game_type(void *data) {
  
 }
 
-void send_player_queue(int status, char *error, int32_t pn, int socket) {
+void send_player_queue(int status, char *error, int pn, int socket) {
     char data[PLAYER_QUEUE_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -138,7 +296,7 @@ void process_player_queue(void *data) {
 
 }
 
-void send_game_ready(int status, char *error, int32_t pn, int socket) {
+void send_game_ready(int status, char *error, int pn, int socket) {
     char data[GAME_READY_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -163,7 +321,7 @@ void process_game_ready(void *data) {
 
 }
 
-void send_player_ready(int32_t pn, int socket) {
+void send_player_ready(int pn, int socket) {
     send_packet(pn, 6, NULL, 0, PLAYER_READY_PACKET_DATA_SIZE, socket);
     printf("sent player_ready\n");
 }
@@ -173,7 +331,7 @@ void process_player_ready() {
 
 }
 
-void send_game_state(void *game_state, int32_t pn, int socket) {
+void send_game_state(void *game_state, int pn, int socket) {
     char data[GAME_STATE_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -326,16 +484,18 @@ int verify_packet(char *packet, int *current_pn, long decoded_size) {
 }
 
 /* debug */
-void print_bytes(char *start, size_t len) {
+void print_bytes(void *start, size_t len) {
     size_t i;
+    char *s = (char *) start;
 
     for (i = 0; i < len; i++)
-        printf("%02hhx ", start[i]);
+        printf("%02hhx ", s[i]);
     putchar('\n');
 }
 
-void print_bytes_full(char *start, size_t len) {
+void print_bytes_full(void *start, size_t len) {
     size_t i;
+    char *s = (char *) start;
 
     if (len > 999) {
         printf("Cannot print more than 999 bytes! You asked for %lu\n", len);
@@ -346,15 +506,15 @@ void print_bytes_full(char *start, size_t len) {
     printf("[NPK] [C] [HEX] [DEC] [ BINARY ]\n");
     printf("================================\n");
     for (i = 0; i < len; i++) {
-        printf(" %3lu | %c | %02X | %3d | %c%c%c%c%c%c%c%c\n", i, printable_char(start[i]), start[i], start[i],
-            start[i] & 0x80 ? '1' : '0',
-            start[i] & 0x40 ? '1' : '0',
-            start[i] & 0x20 ? '1' : '0',
-            start[i] & 0x10 ? '1' : '0',
-            start[i] & 0x08 ? '1' : '0',
-            start[i] & 0x04 ? '1' : '0',
-            start[i] & 0x02 ? '1' : '0',
-            start[i] & 0x01 ? '1' : '0'
+        printf(" %3lu | %c | %02X | %3d | %c%c%c%c%c%c%c%c\n", i, printable_char(s[i]), s[i], s[i],
+            s[i] & 0x80 ? '1' : '0',
+            s[i] & 0x40 ? '1' : '0',
+            s[i] & 0x20 ? '1' : '0',
+            s[i] & 0x10 ? '1' : '0',
+            s[i] & 0x08 ? '1' : '0',
+            s[i] & 0x04 ? '1' : '0',
+            s[i] & 0x02 ? '1' : '0',
+            s[i] & 0x01 ? '1' : '0'
         );
     }
 }
@@ -400,7 +560,7 @@ size_t insert_null_bytes(int count, char *buf, size_t buflen, size_t offset) {
 }
 
 size_t insert_separator(char *buf, size_t buflen, size_t offset) {
-    return insert_bytes((char *) PACKET_SEPARATOR, PACKET_SEPARATOR_SIZE, buf, buflen, offset);
+    return insert_bytes(PACKET_SEPARATOR, PACKET_SEPARATOR_SIZE, buf, buflen, offset);
 }
 
 
@@ -518,4 +678,49 @@ char printable_char(char c) {
     if (isprint(c) != 0)
         return c;
     return ' ';
+}
+
+
+/* --- EXTRA UTILITIES --- */
+/* code from https://www.tutorialspoint.com/c-program-to-validate-an-ip-address */
+/* Assignment document did not specify that we need to validate the ip address, but we decided to do it anyway. 
+However, since it was not specified, we did not code this ourselves, but rather took the code from tutorialspoint.com (refence above) */
+int validate_number(char *str) {
+    while (*str) {
+        if(!isdigit(*str)){ //if the character is not a number, return false
+            return 0;
+        }
+        str++; //point to next character
+    }
+    return 1;
+}
+
+/* code from https://www.tutorialspoint.com/c-program-to-validate-an-ip-address */
+int validate_ip(char *ip) { //check whether the IP is valid or not
+    int num, dots = 0;
+    char copy[30];
+
+    if (ip == NULL)
+        return 0;
+
+    strcpy(copy, ip);
+    char *ptr;
+    ptr = strtok(copy, "."); //cut the string using dor delimiter
+    if (ptr == NULL)
+        return 0;
+    while (ptr) {
+        if (!validate_number(ptr)) //check whether the sub string is
+            return 0;
+        num = atoi(ptr); //convert substring to number
+        if (num >= 0 && num <= 255) {
+            ptr = strtok(NULL, "."); //cut the next part of the string
+            if (ptr != NULL)
+            dots++; //increase the dot count
+        } else
+            return 0;
+        }
+        if (dots != 3) { //if the number of dots are not 3, return false
+            return 0;
+        }
+    return 1;
 }
