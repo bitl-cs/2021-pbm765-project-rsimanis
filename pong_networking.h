@@ -3,7 +3,7 @@
 
 #include "pong_game.h"
 
-#include <inttypes.h>
+#include "inttypes.h"
 #include <stddef.h>
 #include <limits.h>
 
@@ -11,17 +11,17 @@
 #define MAX_CLIENTS                         1
 
 /* general */
-#define PACKET_NUMBER_SIZE                  4
-#define PACKET_ID_SIZE                      4
-#define PACKET_SIZE_SIZE                    4
-#define PACKET_CHECKSUM_SIZE                1
+#define PACKET_NUMBER_SIZE                  sizeof(uint32_t)
+#define PACKET_ID_SIZE                      sizeof(unsigned char)
+#define PACKET_SIZE_SIZE                    sizeof(uint32_t)
+#define PACKET_CHECKSUM_SIZE                sizeof(char)
 #define PACKET_HEADER_SIZE                  (PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE + PACKET_CHECKSUM_SIZE)
-#define PACKET_SEPARATOR_SIZE               2
-#define PACKET_STATUS_SIZE                  4
-#define PACKET_GAME_TYPE_SIZE               4
+#define PACKET_SEPARATOR_SIZE               (sizeof(PACKET_SEPARATOR) - 1)
+#define PACKET_STATUS_SIZE                  sizeof(char)
+#define PACKET_GAME_TYPE_SIZE               sizeof(char)
 #define PACKET_MAX_SIZE                     GAME_STATE_PACKET_SIZE 
 #define PACKET_MAX_DATA_SIZE                GAME_STATE_PACKET_MAX_DATA_SIZE
-#define PACKET_MAX_ERROR_MESSAGE_SIZE       100
+#define PACKET_MAX_MESSAGE_SIZE             256
 
 /* specific */
 #define CLIENT_PACKET_MAX_SIZE              (PACKET_HEADER_SIZE + CLIENT_PACKET_MAX_DATA_SIZE)
@@ -64,6 +64,14 @@
 #define DEFAULT_IP          "127.0.0.1"
 #define PACKET_SEPARATOR    "--"
 
+/* structs */
+typedef struct _packet_info {
+    uint32_t *number;
+    unsigned char *id;
+    uint32_t *size;
+    char *data;
+} packet_info;
+
 /* intialization */
 int get_host_parameter(int argc, char **argv, char *host);
 int get_port_parameter(int argc, char **argv, char *port);
@@ -71,33 +79,36 @@ int get_server_socket(char *port);
 int get_client_socket(char *host, char *port);
 
 /* packet processing */
-void send_packet(int pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket);
-void send_join(char *name, int pn, int socket);
+void send_packet(int32_t pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket);
+
+void send_join(char *name, int32_t pn, int socket);
+void send_lobby(int status, char *error, int32_t pn, int socket);
+void send_game_type(int type, int32_t pn, int socket);
+void send_player_queue(int status, char *error, int32_t pn, int socket);
+void send_game_ready(int status, char *error, int32_t pn, int socket);
+void send_player_ready(int32_t pn, int socket);
+void send_game_state(void *game_state, int32_t pn, int socket);
+void send_player_input(char input, int32_t pn, int socket);
+void send_check_status(int32_t pn, int socket);
+void send_game_end(int status, char *error, void *game_statistics, int32_t pn, int socket);
+
 void process_join(void *data);
-void send_lobby(int status, char *error, int pn, int socket);
 void process_lobby(void *data);
-void send_game_type(int type, int pn, int socket);
 void process_game_type(void *data);
-void send_player_queue(int status, char *error, int pn, int socket);
 void process_player_queue(void *data);
-void send_game_ready(int status, char *error, int pn, int socket);
 void process_game_ready(void *data);
-void send_player_ready(int pn, int socket);
-void process_player_ready();
-void send_game_state(void *game_state, int pn, int socket);
+void process_player_ready(void);
 void process_game_state(void *data);
-void send_player_input(char input, int pn, int socket);
 void process_player_input(void *data);
-void send_check_status(int pn, int socket);
-void process_check_status();
-void send_game_end(int status, char *error, void *game_statistics, int pn, int socket);
+void process_check_status(void);
 void process_game_end(void *data);
 
 /* utilities */
 int encode(char *data, size_t datalen, char *buf, size_t buflen);
 int decode(char *data, size_t datalen, char *buf, size_t buflen);
 char xor_checksum(char *data, size_t len);
-int verify_packet(char *packet, int *current_pn, long decoded_size);
+int verify_packet(char *packet, uint32_t current_pn, long decoded_size);
+void get_packet_info(char *packet, packet_info *packet_info);
 
 /* debug */
 void print_bytes(void *start, size_t len);
@@ -128,6 +139,7 @@ long network_to_host_long(long x);
 float network_to_host_float(float x);
 double network_to_host_double(double x);
 int32_t network_to_host_int32_t(int32_t x);
+uint32_t network_to_host_uint32_t(uint32_t x);
 int64_t network_to_host_int64_t(int64_t x);
 
 int is_little_endian_system();

@@ -45,7 +45,7 @@ void start_network(char *port, shared_memory_config *sh_mem_cfg);
 int find_free_client_id(shared_memory_config *sh_mem_cfg);
 void process_client(int id, int socket, shared_memory_config *sh_mem_cfg, client_data client_data);
 void remove_client(int id, int socket, shared_memory_config *sh_mem_cfg);
-void *process_incoming_packets(void *arg);
+void *process_incoming_client_packets(void *arg);
 char *get_client_data_ptr(int id, shared_memory_config *sh_mem_cfg);
 client_data get_client_data(int id, shared_memory_config *sh_mem_cfg);
 

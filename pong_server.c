@@ -127,7 +127,7 @@ void process_client(int id, int socket, shared_memory_config* sh_mem_cfg, client
     pra.send_pn = send_pn;
     pra.client_data = &client_data;
     pthread_t processing_thread_id;
-    if (pthread_create(&processing_thread_id, NULL, process_incoming_packets, (void *) &pra) != 0) {
+    if (pthread_create(&processing_thread_id, NULL, process_incoming_client_packets, (void *) &pra) != 0) {
         printf("Error creating thread\n");
         remove_client(id, socket, sh_mem_cfg);
         exit(1);
@@ -140,7 +140,7 @@ void process_client(int id, int socket, shared_memory_config* sh_mem_cfg, client
                 if (prevc == '-') {
                     recv_pn++; /* TODO: need more checks if recv_pn overflows */
 
-                    while (*(client_data.packet_ready) == 1) /* another packet is being processed */
+                    while (*(client_data.packet_ready)) /* another packet is being processed */
                         sleep(1.0/100);
 
                     decoded_size = decode(recv_buf, encoded_size, client_data.packet_buf, CLIENT_PACKET_MAX_SIZE); /* decode packet, put the result in shared memory */
@@ -179,7 +179,7 @@ void process_client(int id, int socket, shared_memory_config* sh_mem_cfg, client
     }
 }
 
-void *process_incoming_packets(void *arg) {
+void *process_incoming_client_packets(void *arg) {
     /* process arguments */
     proc_inc_packets_args *args = (proc_inc_packets_args *) arg;
     int id = args->id;

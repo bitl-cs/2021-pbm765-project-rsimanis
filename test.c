@@ -1,8 +1,10 @@
-#include "pong_networking.h"
-#include "pong_server.h"
+// #include "pong_networking.h"
+// #include "pong_server.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+
+#define PACKET_SEPARATOR "--"
 
 typedef unsigned char *byte_pointer;
 
@@ -71,12 +73,7 @@ int main() {
 
     // send_player_ready(1, 0);
 
-    char buf[10];
-    memset(buf, 0, 10);
-    print_bytes(buf, 10);
-    insert_separator(buf, 10, 0);
-    print_bytes(buf, 10);
-
+    printf("%lu\n", sizeof(PACKET_SEPARATOR));
 
 
     return 0;

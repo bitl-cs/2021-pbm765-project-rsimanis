@@ -167,13 +167,13 @@ int get_client_socket(char *host, char *port){
 
 /* packet processing */
 /* send generic packet (data must be in network endianess) */
-void send_packet(int pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket) {
+void send_packet(int32_t pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket) {
     char packet[PACKET_MAX_SIZE];
     char final_packet[2 * PACKET_MAX_SIZE + PACKET_SEPARATOR_SIZE]; /* assume that all characters in array "packet" could get encoded */ 
     size_t offset = 0;
 
     /* add packet number */
-    offset += insert_int32_t(host_to_network_int32_t((int32_t) pn), packet, sizeof(packet), offset);
+    offset += insert_int32_t(host_to_network_int32_t(pn), packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* add packet id */
@@ -214,7 +214,7 @@ void send_packet(int pn, int pid, char *data, size_t datalen, size_t packet_data
     send(socket, final_packet, offset, 0);
 }
 
-void send_join(char *name, int pn, int socket) {
+void send_join(char *name, int32_t pn, int socket) {
     printf("sent join\n");
     /* check if the name exceeds the limit */
     size_t namelen = strlen(name);
@@ -228,7 +228,7 @@ void process_join(void *data) {
     printf("received join\n");
 }
 
-void send_lobby(int status, char *error, int pn, int socket) {
+void send_lobby(int status, char *error, int32_t pn, int socket) {
     printf("sent lobby\n");
     char data[LOBBY_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
@@ -254,7 +254,7 @@ void process_lobby(void *data){
     putchar('\n');
 }
 
-void send_game_type(int type, int pn, int socket){
+void send_game_type(int type, int32_t pn, int socket){
     printf("sent game_type\n");
     char data[GAME_TYPE_PACKET_DATA_SIZE];
     size_t offset = 0;
@@ -270,7 +270,7 @@ void process_game_type(void *data) {
  
 }
 
-void send_player_queue(int status, char *error, int pn, int socket) {
+void send_player_queue(int status, char *error, int32_t pn, int socket) {
     char data[PLAYER_QUEUE_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -296,7 +296,7 @@ void process_player_queue(void *data) {
 
 }
 
-void send_game_ready(int status, char *error, int pn, int socket) {
+void send_game_ready(int status, char *error, int32_t pn, int socket) {
     char data[GAME_READY_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -321,7 +321,7 @@ void process_game_ready(void *data) {
 
 }
 
-void send_player_ready(int pn, int socket) {
+void send_player_ready(int32_t pn, int socket) {
     send_packet(pn, 6, NULL, 0, PLAYER_READY_PACKET_DATA_SIZE, socket);
     printf("sent player_ready\n");
 }
@@ -331,7 +331,7 @@ void process_player_ready() {
 
 }
 
-void send_game_state(void *game_state, int pn, int socket) {
+void send_game_state(void *game_state, int32_t pn, int socket) {
     char data[GAME_STATE_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -347,7 +347,7 @@ void process_game_state(void *data) {
 
 }
 
-void send_player_input(char input, int pn, int socket) {
+void send_player_input(char input, int32_t pn, int socket) {
     char data[PLAYER_INPUT_PACKET_DATA_SIZE];
     size_t offset = 0;
 
@@ -361,7 +361,7 @@ void process_player_input(void *data) {
 
 }
 
-void send_check_status(int pn, int socket) {
+void send_check_status(int32_t pn, int socket) {
     send_packet(pn, 9, NULL, 0, CHECK_STATUS_PACKET_DATA_SIZE, socket);
     printf("sent check_status\n");
 }
@@ -373,7 +373,7 @@ void process_check_status() {
 
 /* UPDATE: takes pointer to char arrays containing name */
 /* game statistics data follows immediatelly after game_statistics pointer in the same order as it is defined in API doc */
-void send_game_end(int status, char *error, void *game_statistics, int pn, int socket) {
+void send_game_end(int status, char *error, void *game_statistics, int32_t pn, int socket) {
     char data[GAME_END_PACKET_MAX_DATA_SIZE];
     size_t offset = 0;
 
@@ -463,15 +463,13 @@ char xor_checksum(char *data, size_t len) {
     return rez;
 }
 
-int verify_packet(char *packet, int *current_pn, long decoded_size) {
-    int32_t *recv_pn = (int32_t *) packet;
+int verify_packet(char *packet, uint32_t current_pn, long decoded_size) {
+    uint32_t *recv_pn = (uint32_t *) packet;
     int64_t *recv_data_size = (int64_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
     char *recv_checksum = packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE;
     char *data = packet + PACKET_HEADER_SIZE;
 
-    // printf("recv_pn: %d\n", *recv_pn);
-    // printf("current_pn: %d\n", *current_pn);
-    if (*recv_pn < *current_pn)
+    if (*recv_pn < current_pn)
         return 0;
 
     if (*recv_data_size != decoded_size - PACKET_HEADER_SIZE)
@@ -482,6 +480,14 @@ int verify_packet(char *packet, int *current_pn, long decoded_size) {
 
     return 1;
 }
+
+void get_packet_info(char *packet, packet_info *packet_info) {
+    packet_info->number = (uint32_t *) packet;
+    packet_info->id = (unsigned char *) (packet + PACKET_NUMBER_SIZE);
+    packet_info->size = (uint32_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
+    packet_info->data = packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE;
+}
+
 
 /* debug */
 void print_bytes(void *start, size_t len) {
@@ -665,6 +671,11 @@ double network_to_host_double(double x) {
 
 int32_t network_to_host_int32_t(int32_t x) {
     network_to_host_bytes((char *) &x, sizeof(int32_t));
+    return x;
+}
+
+uint32_t network_to_host_uint32_t(uint32_t x) {
+    network_to_host_bytes((char *) &x, sizeof(uint32_t));
     return x;
 }
 
