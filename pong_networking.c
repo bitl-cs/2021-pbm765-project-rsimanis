@@ -164,49 +164,80 @@ int get_client_socket(char *host, char *port){
     return client_socket;
 }
 
+void get_recv_mem_config(char *recv_mem, recv_memory_config *recv_mem_cfg) {
+    char *recv_mem_ptr;
+
+    recv_mem_ptr = recv_mem;
+    recv_mem_cfg->recv_memory = recv_mem_ptr;
+    recv_mem_cfg->packet_ready = recv_mem_ptr;
+    recv_mem_ptr += 1;
+    recv_mem_cfg->packet_info.packet = recv_mem_ptr;
+    recv_mem_cfg->packet_info.pn = (uint32_t *) recv_mem_ptr;
+    recv_mem_ptr += PACKET_NUMBER_SIZE;
+    recv_mem_cfg->packet_info.pid = (unsigned char *) recv_mem_ptr;
+    recv_mem_ptr += PACKET_ID_SIZE;
+    recv_mem_cfg->packet_info.psize = (int32_t *) recv_mem_ptr;
+    recv_mem_ptr += PACKET_SIZE_SIZE;
+    recv_mem_cfg->packet_info.pdata = recv_mem_ptr;
+}
+
+void get_send_mem_config(char *send_mem, send_memory_config *send_mem_cfg) {
+    char *send_mem_ptr;
+
+    send_mem_ptr = send_mem;
+    send_mem_cfg->send_memory = send_mem_ptr;
+    send_mem_cfg->packet_ready = send_mem_ptr;
+    send_mem_ptr += 1;
+    send_mem_cfg->pid = (unsigned char *) send_mem_ptr;
+    send_mem_ptr += PACKET_ID_SIZE;
+    send_mem_cfg->packet_data_size = (int32_t *) send_mem_ptr;
+    send_mem_ptr += PACKET_SIZE_SIZE;
+    send_mem_cfg->pdata = send_mem_ptr;
+}
+
 
 /* packet processing */
 /* send generic packet (data must be in network endianess) */
-void send_packet(int32_t pn, int pid, char *data, size_t datalen, size_t packet_data_size, int socket) {
+void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size_t datalen, int socket) {
     char packet[PACKET_MAX_SIZE];
     char final_packet[2 * PACKET_MAX_SIZE + PACKET_SEPARATOR_SIZE]; /* assume that all characters in array "packet" could get encoded */ 
     size_t offset = 0;
 
     /* add packet number */
-    offset += insert_int32_t(host_to_network_int32_t(pn), packet, sizeof(packet), offset);
+    offset += insert_uint32_t_as_big_endian(pn, packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* add packet id */
-    offset += insert_int32_t(host_to_network_int32_t((int32_t) pid), packet, sizeof(packet), offset);
+    offset += insert_char(pid, packet, sizeof(packet), offset); 
     // print_bytes(packet, offset);
 
     /* add the size of data segment */
-    offset += insert_int32_t(host_to_network_int32_t(packet_data_size), packet, sizeof(packet), offset);
+    offset += insert_int32_t_as_big_endian(psize, packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
-    /* add checksum */
-    offset += insert_char(xor_checksum(data, datalen), packet, sizeof(packet), offset);
-    // print_bytes(packet, offset);
-
-    /* add data */
+    /* add data (assumes that data is in network byte order) */
     offset += insert_bytes(data, datalen, packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* fill the unused data segment with null bytes */
-    offset += insert_null_bytes(packet_data_size - offset + PACKET_HEADER_SIZE, packet, sizeof(packet), offset);
+    offset += insert_null_bytes(psize - datalen, packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
     // printf("%lu\n", offset);
 
+    /* add checksum */
+    offset += insert_char(xor_checksum(packet, PACKET_HEADER_SIZE + datalen), packet, sizeof(packet), offset);
+    // print_bytes(packet, offset);
+
     /* encode */
-    offset = encode(packet, offset, final_packet, sizeof(final_packet));
+    offset = encode(packet, offset, final_packet, sizeof(final_packet) - PACKET_SEPARATOR_SIZE);
     // print_bytes(final_packet, offset);
     // printf("%lu\n", offset);
 
     /* add separator */
     offset += insert_separator(final_packet, sizeof(final_packet), offset);
-    print_bytes(final_packet, offset);
-    printf("%lu\n", offset);
-    putchar('\n');
+    // print_bytes(final_packet, offset);
+    // printf("%lu\n", offset);
+    // putchar('\n');
     // print_bytes_full(final_packet, offset);
     // putchar('\n');
 
@@ -214,190 +245,6 @@ void send_packet(int32_t pn, int pid, char *data, size_t datalen, size_t packet_
     send(socket, final_packet, offset, 0);
 }
 
-void send_join(char *name, int32_t pn, int socket) {
-    printf("sent join\n");
-    /* check if the name exceeds the limit */
-    size_t namelen = strlen(name);
-    if (namelen > MAX_NAME_SIZE - 1)
-        namelen = MAX_NAME_SIZE - 1;
-
-    send_packet(pn, 1, name, namelen, JOIN_PACKET_DATA_SIZE, socket);
-}
-
-void process_join(void *data) {
-    printf("received join\n");
-}
-
-void send_lobby(int status, char *error, int32_t pn, int socket) {
-    printf("sent lobby\n");
-    char data[LOBBY_PACKET_MAX_DATA_SIZE];
-    size_t offset = 0;
-
-    offset += insert_int32_t(host_to_network_int32_t((int32_t) status), data, sizeof(data), offset);
-    if (error != NULL && status == 1) {
-        /* check if the error exceeds the limit */
-        size_t error_len = strlen(error);
-        if(error_len > PACKET_MAX_ERROR_MESSAGE_SIZE - 1)
-            error_len = PACKET_MAX_ERROR_MESSAGE_SIZE - 1;
-
-        offset += insert_str(error, error_len, data, sizeof(data), offset);
-        send_packet(pn, 2, data, offset, LOBBY_PACKET_MAX_DATA_SIZE, socket);
-    } 
-    else {
-        send_packet(pn, 2, data, offset, PACKET_STATUS_SIZE, socket);
-    }
-}
- 
-void process_lobby(void *data){
-    printf("received lobby\n");
-    print_bytes(data, LOBBY_PACKET_MAX_DATA_SIZE);
-    putchar('\n');
-}
-
-void send_game_type(int type, int32_t pn, int socket){
-    printf("sent game_type\n");
-    char data[GAME_TYPE_PACKET_DATA_SIZE];
-    size_t offset = 0;
-
-    offset += insert_int32_t(host_to_network_int32_t((int32_t) type), data, sizeof(data), offset);
-    send_packet(pn, 3, data, offset, GAME_TYPE_PACKET_DATA_SIZE, socket);
-}
- 
-void process_game_type(void *data) {
-    printf("received game_type\n");
-    print_bytes(data, GAME_TYPE_PACKET_DATA_SIZE);
-    putchar('\n');
- 
-}
-
-void send_player_queue(int status, char *error, int32_t pn, int socket) {
-    char data[PLAYER_QUEUE_PACKET_MAX_DATA_SIZE];
-    size_t offset = 0;
-
-    offset += insert_int32_t(host_to_network_int32_t((int32_t) status), data, sizeof(data), offset);
-    if (error != NULL && status == 1) {
-        /* check if the error exceeds the limit */
-        size_t error_len = strlen(error);
-        if(error_len > PACKET_MAX_ERROR_MESSAGE_SIZE - 1)
-            error_len = PACKET_MAX_ERROR_MESSAGE_SIZE - 1;
-
-        offset += insert_str(error, error_len, data, sizeof(data), offset);
-        send_packet(pn, 4, data, offset, PLAYER_QUEUE_PACKET_MAX_DATA_SIZE, socket);
-    } 
-    else {
-        send_packet(pn, 4, data, offset, PACKET_STATUS_SIZE, socket);
-    }
-    printf("sent player_queue\n");
-
-}
-
-void process_player_queue(void *data) {
-    printf("received player_queue\n");
-
-}
-
-void send_game_ready(int status, char *error, int32_t pn, int socket) {
-    char data[GAME_READY_PACKET_MAX_DATA_SIZE];
-    size_t offset = 0;
-
-    offset += insert_int32_t(host_to_network_int32_t((int32_t) status), data, sizeof(data), offset);
-    if (error != NULL && status == 1) {
-        /* check if the error exceeds the limit */
-        size_t error_len = strlen(error);
-        if(error_len > PACKET_MAX_ERROR_MESSAGE_SIZE - 1)
-            error_len = PACKET_MAX_ERROR_MESSAGE_SIZE - 1;
-
-        offset += insert_str(error, error_len, data, sizeof(data), offset);
-        send_packet(pn, 5, data, offset, GAME_READY_PACKET_MAX_DATA_SIZE, socket);
-    } 
-    else {
-        send_packet(pn, 5, data, offset, PACKET_STATUS_SIZE, socket);
-    }
-    printf("sent game_ready\n");
-}
-
-void process_game_ready(void *data) {
-    printf("received game_ready\n");
-
-}
-
-void send_player_ready(int32_t pn, int socket) {
-    send_packet(pn, 6, NULL, 0, PLAYER_READY_PACKET_DATA_SIZE, socket);
-    printf("sent player_ready\n");
-}
-
-void process_player_ready() {
-    printf("received player_ready\n");
-
-}
-
-void send_game_state(void *game_state, int32_t pn, int socket) {
-    char data[GAME_STATE_PACKET_MAX_DATA_SIZE];
-    size_t offset = 0;
-
-    /* fix endianess */
-
-    offset += insert_bytes(game_state, GAMEBOARD_STATE_SIZE, data, sizeof(data), offset);
-    send_packet(pn, 7, data, offset, GAME_STATE_PACKET_MAX_DATA_SIZE, socket);
-    printf("sent game_state\n");
-}
-
-void process_game_state(void *data) {
-    printf("received game_state\n");
-
-}
-
-void send_player_input(char input, int32_t pn, int socket) {
-    char data[PLAYER_INPUT_PACKET_DATA_SIZE];
-    size_t offset = 0;
-
-    offset += insert_char(input, data, sizeof(data), offset);
-    send_packet(pn, 8, data, offset, PLAYER_INPUT_PACKET_DATA_SIZE, socket);
-    printf("sent player_input\n");
-}
-
-void process_player_input(void *data) {
-    printf("received player_input\n");
-
-}
-
-void send_check_status(int32_t pn, int socket) {
-    send_packet(pn, 9, NULL, 0, CHECK_STATUS_PACKET_DATA_SIZE, socket);
-    printf("sent check_status\n");
-}
-
-void process_check_status() {
-    printf("received check_status\n");
-
-}
-
-/* UPDATE: takes pointer to char arrays containing name */
-/* game statistics data follows immediatelly after game_statistics pointer in the same order as it is defined in API doc */
-void send_game_end(int status, char *error, void *game_statistics, int32_t pn, int socket) {
-    char data[GAME_END_PACKET_MAX_DATA_SIZE];
-    size_t offset = 0;
-
-    offset += insert_int32_t(host_to_network_int32_t((int32_t) status), data, sizeof(data), offset);
-    if (error != NULL && status == 1) {
-        /* check if the error exceeds the limit */
-        size_t error_len = strlen(error);
-        if(error_len > PACKET_MAX_ERROR_MESSAGE_SIZE - 1)
-            error_len = PACKET_MAX_ERROR_MESSAGE_SIZE - 1;
-
-        offset += insert_str(error, error_len, data, sizeof(data), offset);
-        send_packet(pn, 10, data, offset, GAME_END_PACKET_MAX_DATA_SIZE, socket);
-    } 
-    else {
-        offset += insert_bytes(game_statistics, GAME_STATISTICS_SIZE, data, sizeof(data), offset);
-        send_packet(pn, 10, data, offset, PACKET_STATUS_SIZE, socket);
-    }
-    printf("sent game_end\n");
-}
-
-void process_game_end(void *data) {
-    printf("received game_end\n");
-
-}
 
 /* utilities */
 int encode(char *data, size_t datalen, char *buf, size_t buflen) {
@@ -463,29 +310,24 @@ char xor_checksum(char *data, size_t len) {
     return rez;
 }
 
-int verify_packet(char *packet, uint32_t current_pn, long decoded_size) {
-    uint32_t *recv_pn = (uint32_t *) packet;
-    int64_t *recv_data_size = (int64_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
-    char *recv_checksum = packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE;
-    char *data = packet + PACKET_HEADER_SIZE;
-
-    if (*recv_pn < current_pn)
-        return 0;
-
-    if (*recv_data_size != decoded_size - PACKET_HEADER_SIZE)
-        return 0;
-
-    if (*recv_checksum != xor_checksum(data, *recv_data_size))
-        return 0;
-
-    return 1;
+int verify_packet(uint32_t recv_pn, packet_info *packet_info, int32_t decoded_psize, char decoded_checksum) {
+    return (*(packet_info->pn) >= recv_pn) &&
+            (*(packet_info->psize) == decoded_psize) &&
+            (decoded_checksum == xor_checksum(packet_info->packet, decoded_psize));
 }
 
 void get_packet_info(char *packet, packet_info *packet_info) {
-    packet_info->number = (uint32_t *) packet;
-    packet_info->id = (unsigned char *) (packet + PACKET_NUMBER_SIZE);
-    packet_info->size = (uint32_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
-    packet_info->data = packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE;
+    char *packet_ptr;
+
+    packet_ptr = packet;
+    packet_info->packet = packet_ptr;
+    packet_info->pn = (uint32_t *) packet_ptr;
+    packet_ptr += PACKET_NUMBER_SIZE;
+    packet_info->pid = (unsigned char *) packet_ptr;
+    packet_ptr += PACKET_ID_SIZE;
+    packet_info->psize = (int32_t *) packet_ptr; 
+    packet_ptr += PACKET_SIZE_SIZE;
+    packet_info->pdata = packet_ptr;
 }
 
 
@@ -547,11 +389,7 @@ size_t insert_char(char x, char *buf, size_t buflen, size_t offset) {
 }
 
 size_t insert_str(char *str, size_t strlen, char *buf, size_t buflen, size_t offset) {
-    size_t rez;
-
-    rez = insert_bytes(str, strlen, buf, buflen - 1, offset);
-    rez += insert_null_bytes(1, buf, buflen, offset + rez);
-    return rez;
+    return insert_bytes(str, strlen + 1, buf, buflen, offset); /* including null byte */
 }
 
 size_t insert_null_bytes(int count, char *buf, size_t buflen, size_t offset) {
@@ -570,13 +408,66 @@ size_t insert_separator(char *buf, size_t buflen, size_t offset) {
 }
 
 
+size_t insert_bytes_as_big_endian(char *data, size_t datalen, char *buf, size_t buflen, size_t offset) {
+    size_t i;
+
+    if (is_little_endian_system()) {
+        /* reverse */
+        for (i = 0; i < datalen && i + offset < buflen; i++)
+            buf[i + offset] = data[datalen - i - 1];
+    }
+    else {
+        /* store it as it is */
+        for (i = 0; i < datalen && i + offset < buflen; i++)
+            buf[i + offset] = data[i];
+    }
+    return i;
+}
+
+size_t insert_short_as_big_endian(short x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_int_as_big_endian(int x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_long_as_big_endian(long x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_float_as_big_endian(float x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_double_as_big_endian(double x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_int32_t_as_big_endian(int32_t x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_uint32_t_as_big_endian(uint32_t x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_int64_t_as_big_endian(int64_t x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+size_t insert_uint64_t_as_big_endian(uint64_t x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
+
 int is_little_endian_system() {
     volatile uint32_t i = 0x01234567;
     return (*((uint8_t *) (&i))) == 0x67;
 }
 
 /* if needed reverses "len" bytes starting at "start", so that the order is BIG ENDIAN */
-void host_to_network_bytes(char *start, size_t len) {
+void host_to_big_endian_bytes(char *start, size_t len) {
     size_t i;
     char temp;
 
@@ -592,43 +483,53 @@ void host_to_network_bytes(char *start, size_t len) {
     }
 }
 
-short host_to_network_short(short x) {
-    host_to_network_bytes((char *) &x, sizeof(short));
+short host_to_big_endian_short(short x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-int host_to_network_int(int x) {
-    host_to_network_bytes((char *) &x, sizeof(int));
+int host_to_big_endian_int(int x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-long host_to_network_long(long x) {
-    host_to_network_bytes((char *) &x, sizeof(long));
+long host_to_big_endian_long(long x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-float host_to_network_float(float x) {
-    host_to_network_bytes((char *) &x, sizeof(float));
+float host_to_big_endian_float(float x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-double host_to_network_double(double x) {
-    host_to_network_bytes((char *) &x, sizeof(double));
+double host_to_big_endian_double(double x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-int32_t host_to_network_int32_t(int32_t x) {
-    host_to_network_bytes((char *) &x, sizeof(int32_t));
+int32_t host_to_big_endian_int32_t(int32_t x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-int64_t host_to_network_int64_t(int64_t x) {
-    host_to_network_bytes((char *) &x, sizeof(int64_t));
+uint32_t host_to_big_endian_uint32_t(uint32_t x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
+    return x;
+}
+
+int64_t host_to_big_endian_int64_t(int64_t x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
+    return x;
+}
+
+uint64_t host_to_big_endian_uint64_t(uint64_t x) {
+    host_to_big_endian_bytes((char *) &x, sizeof(x));
     return x;
 }
 
 /* if needed reverses "len" bytes starting at "start", so that the order is LITTLE ENDIAN */
-void network_to_host_bytes(char *start, size_t len) {
+void big_endian_to_host_bytes(char *start, size_t len) {
     size_t i;
     char temp;
 
@@ -644,43 +545,48 @@ void network_to_host_bytes(char *start, size_t len) {
     }
 }
 
-short network_to_host_short(short x) {
-    network_to_host_bytes((char *) &x, sizeof(short));
+short big_endian_to_host_short(short x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-int network_to_host_int(int x) {
-    network_to_host_bytes((char *) &x, sizeof(int));
+int big_endian_to_host_int(int x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-long network_to_host_long(long x) {
-    network_to_host_bytes((char *) &x, sizeof(long));
+long big_endian_to_host_long(long x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-float network_to_host_float(float x) {
-    network_to_host_bytes((char *) &x, sizeof(float));
+float big_endian_to_host_float(float x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-double network_to_host_double(double x) {
-    network_to_host_bytes((char *) &x, sizeof(double));
+double big_endian_to_host_double(double x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-int32_t network_to_host_int32_t(int32_t x) {
-    network_to_host_bytes((char *) &x, sizeof(int32_t));
+int32_t big_endian_to_host_int32_t(int32_t x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-uint32_t network_to_host_uint32_t(uint32_t x) {
-    network_to_host_bytes((char *) &x, sizeof(uint32_t));
+uint32_t big_endian_to_host_uint32_t(uint32_t x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 
-int64_t network_to_host_int64_t(int64_t x) {
-    network_to_host_bytes((char *) &x, sizeof(int64_t));
+int64_t big_endian_to_host_int64_t(int64_t x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
+    return x;
+}
+
+uint64_t big_endian_to_host_uint64_t(uint64_t x) {
+    big_endian_to_host_bytes((char *) &x, sizeof(x));
     return x;
 }
 

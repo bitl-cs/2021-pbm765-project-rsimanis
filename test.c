@@ -1,8 +1,11 @@
 // #include "pong_networking.h"
 // #include "pong_server.h"
+// #include "pong_networking.h"
+#include <stddef.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <inttypes.h>
 
 #define PACKET_SEPARATOR "--"
 
@@ -44,6 +47,30 @@ void update(struct test_str *ts) {
     ts->taken = '2';
 }
 
+int is_little_endian_system() {
+    volatile uint32_t i = 0x01234567;
+    return (*((uint8_t *) (&i))) == 0x67;
+}
+size_t insert_bytes_as_big_endian(char *data, size_t datalen, char *buf, size_t buflen, size_t offset) {
+    size_t i;
+
+    if (is_little_endian_system()) {
+        /* reverse */
+        for (i = 0; i < datalen && i + offset < buflen; i++)
+            buf[i + offset] = data[datalen - i - 1];
+    }
+    else {
+        /* store as it is */
+        for (i = 0; i < datalen && i + offset < buflen; i++)
+            buf[i + offset] = data[i];
+    }
+    return i;
+}
+
+size_t insert_int32_t_as_big_endian(int32_t x, char *buf, size_t buflen, size_t offset) {
+    return insert_bytes_as_big_endian((char *) &x, sizeof(x), buf, buflen, offset);
+}
+
 int main() {
     // send_join("abcd", 2, 0);
     // send_join("????????????????????????????", 2, 0);
@@ -73,7 +100,13 @@ int main() {
 
     // send_player_ready(1, 0);
 
-    printf("%lu\n", sizeof(PACKET_SEPARATOR));
+    // char buf[10];
+    // memset(buf, 0, 10);
+    // show_bytes(buf, 10);
+    // insert_int32_t_as_big_endian(64, buf, 10, 7);
+    // show_bytes(buf, 10);
+    int a = (31 + (2 - 1)) / 2;
+    printf("%d\n", a);
 
 
     return 0;

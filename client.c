@@ -20,8 +20,6 @@ int main(int argc, char **argv) {
     /* allocate shared memory for client */
     client_shared_memory_config sh_mem_cfg;
     get_client_shared_memory(&sh_mem_cfg);
-    sh_mem_cfg.recv_packet_ready = 0;
-    sh_mem_cfg.send_packet_ready = 0;
 
     /* initialize packet receiving and sending threads */
     client_thread_args cta;
@@ -41,7 +39,7 @@ int main(int argc, char **argv) {
     }
 
     /* process already validated incoming packets */
-    process_server_packets(&sh_mem_cfg);
+    process_server_packets(&(sh_mem_cfg.recv_mem_cfg));
 
     return 0;
 } 

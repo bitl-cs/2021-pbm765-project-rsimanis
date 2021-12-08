@@ -5,11 +5,10 @@
 #include "pong_networking.h"
 
 
-#define SHARED_CLIENT_COUNT_SIZE            sizeof(char)
-#define SHARED_CLIENT_PACKET_READY_SIZE     sizeof(char) 
-#define SHARED_CLIENT_TAKEN_SIZE            sizeof(char) 
-#define SHARED_CLIENT_DATA_SIZE             (SHARED_CLIENT_TAKEN_SIZE + MAX_NAME_SIZE + INPUT_SIZE + SHARED_CLIENT_PACKET_READY_SIZE + CLIENT_PACKET_MAX_SIZE)
-#define SHARED_MEMORY_SIZE                  (SHARED_CLIENT_COUNT_SIZE + MAX_CLIENTS * (SHARED_CLIENT_DATA_SIZE + GAME_STATE_SIZE / 2))
+#define SERVER_SHARED_CLIENT_DATA_SIZE      (1 + MAX_NAME_SIZE + INPUT_SIZE + 1 + PACKET_FROM_CLIENT_MAX_SIZE)
+#define SERVER_SHARED_MEMORY_SIZE           (1 + MAX_CLIENTS * (SERVER_SHARED_CLIENT_DATA_SIZE + (GAME_STATE_SIZE + (2 - 1)) / 2)) /* max memory if everyone plays 1v1 */
+#define SERVER_RECV_MEMORY_SIZE             (1 + PACKET_HEADER_SIZE + PACKET_FROM_CLIENT_MAX_SIZE)
+#define SERVER_SEND_MEMORY_SIZE             (1 + PACKET_ID_SIZE + PACKET_SIZE_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE)
 
 typedef struct _client_data {
     char *client_data;
@@ -47,7 +46,7 @@ void process_client(int id, int socket, shared_memory_config *sh_mem_cfg, client
 void remove_client(int id, int socket, shared_memory_config *sh_mem_cfg);
 void *process_incoming_client_packets(void *arg);
 char *get_client_data_ptr(int id, shared_memory_config *sh_mem_cfg);
-client_data get_client_data(int id, shared_memory_config *sh_mem_cfg);
+void get_client_data(int id, shared_memory_config *sh_mem_cfg, client_data *client_data);
 
 /* debug */
 void print_shared_memory(shared_memory_config *sh_mem_cfg);

@@ -18,12 +18,12 @@ void get_shared_memory(shared_memory_config* sh_mem_cfg) {
     char *sh_mem_ptr;
     int id;
 
-    sh_mem_ptr = mmap(NULL, SHARED_MEMORY_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    sh_mem_ptr = mmap(NULL, SERVER_SHARED_MEMORY_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     sh_mem_cfg->shared_memory = sh_mem_ptr;
     sh_mem_cfg->client_count = (unsigned char *) sh_mem_ptr;
-    sh_mem_ptr += SHARED_CLIENT_COUNT_SIZE;
+    sh_mem_ptr += 1;
     sh_mem_cfg->shared_client_data = sh_mem_ptr;
-    sh_mem_ptr += SHARED_CLIENT_DATA_SIZE * MAX_CLIENTS;
+    sh_mem_ptr += SERVER_SHARED_CLIENT_DATA_SIZE * MAX_CLIENTS;
     sh_mem_cfg->shared_gamestate_data = sh_mem_ptr;
 
     /* set all client slots as not-taken */
@@ -75,7 +75,9 @@ void accept_clients(int server_socket, shared_memory_config *sh_mem_cfg) {
             continue;
         }
         *(sh_mem_cfg->client_count) += 1;
-        client_data cd = get_client_data(new_client_id, sh_mem_cfg);
+
+        client_data cd;
+        get_client_data(new_client_id, sh_mem_cfg, &cd);
         *(cd.taken) = 1;
 
         /* We have a client connection - doublefork&orphan to process it, main thread closes socket and listens for a new one */
@@ -111,7 +113,7 @@ void process_client(int id, int socket, shared_memory_config* sh_mem_cfg, client
     int32_t *pid = (int32_t *) (client_data.packet_buf + PACKET_NUMBER_SIZE);
     int32_t *psize = (int32_t *) (client_data.packet_buf + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
 
-    char recv_buf[2 * CLIENT_PACKET_MAX_SIZE];
+    char recv_buf[2 * PACKET_FROM_CLIENT_MAX_SIZE];
     int recv_pn = -1, send_pn = -1;
 
     char c = 0, prevc = 0;
@@ -143,14 +145,13 @@ void process_client(int id, int socket, shared_memory_config* sh_mem_cfg, client
                     while (*(client_data.packet_ready)) /* another packet is being processed */
                         sleep(1.0/100);
 
-                    decoded_size = decode(recv_buf, encoded_size, client_data.packet_buf, CLIENT_PACKET_MAX_SIZE); /* decode packet, put the result in shared memory */
+                    decoded_size = decode(recv_buf, encoded_size, client_data.packet_buf, PACKET_FROM_CLIENT_MAX_SIZE); /* decode packet, put the result in shared memory */
 
                     /* convert to host endianess */ 
-                    *pn = network_to_host_int32_t(*pn);
-                    *pid = network_to_host_int32_t(*pid);
+                    *pn = network_to_host_uint32_t(*pn);
                     *psize = network_to_host_int32_t(*psize);
 
-                    *(client_data.packet_ready) = verify_packet(client_data.packet_buf, &recv_pn, decoded_size); /* verify packet */
+                    *(client_data.packet_ready) = verify_packet(recv_pn, &packet_info, decoded_size - PACKET_HEADER_SIZE, decoded_checksum); /* verify packet */
 
                     encoded_size = i = prevc = 0;
                     continue;
@@ -196,8 +197,8 @@ void *process_incoming_client_packets(void *arg) {
                 case 1:
                     process_join(data);
                     // print_bytes(shared_recv_buf, JOIN_PACKET_SIZE);
-                    send_lobby(0, NULL, ++send_pn, socket);
-                    send_lobby(1, "bla bla", ++send_pn, socket);
+                    // send_lobby(0, NULL, ++send_pn, socket);
+                    // send_lobby(1, "bla bla", ++send_pn, socket);
                     // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
                     // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
                     // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
@@ -208,7 +209,7 @@ void *process_incoming_client_packets(void *arg) {
                     break;
                 case 3:
                     // print_bytes(shared_recv_buf, GAME_TYPE_PACKET_SIZE);
-                    process_game_type(data);
+                    // process_game_type(data);
                     // print_bytes(shared_recv_buf, GAME_TYPE_PACKET_SIZE);
                     // send_player_queue(1, "XD", ++send_pn, socket);
                     break;
@@ -250,25 +251,23 @@ void remove_client(int id, int socket, shared_memory_config *sh_mem_cfg) {
 }
 
 char *get_client_data_ptr(int id, shared_memory_config *sh_mem_cfg) {
-    return sh_mem_cfg->shared_client_data + SHARED_CLIENT_DATA_SIZE * id;
+    return sh_mem_cfg->shared_client_data + SERVER_SHARED_CLIENT_DATA_SIZE * id;
 }
 
-client_data get_client_data(int id, shared_memory_config *sh_mem_cfg) {
-    client_data rez;
-    char *client_data_ptr;
+void get_client_data(int id, shared_memory_config *sh_mem_cfg, client_data *cd) {
+    char *cd_ptr;
 
-    client_data_ptr = get_client_data_ptr(id, sh_mem_cfg);
-    rez.client_data = client_data_ptr;
-    rez.taken = (unsigned char *) client_data_ptr;
-    client_data_ptr += SHARED_CLIENT_TAKEN_SIZE;
-    rez.name = client_data_ptr;
-    client_data_ptr += MAX_NAME_SIZE;
-    rez.input = client_data_ptr; 
-    client_data_ptr += INPUT_SIZE; 
-    rez.packet_ready = client_data_ptr;
-    client_data_ptr += SHARED_CLIENT_PACKET_READY_SIZE;
-    rez.packet_buf = client_data_ptr;
-    return rez;
+    cd_ptr = get_client_data_ptr(id, sh_mem_cfg);
+    cd->client_data = cd_ptr;
+    cd->taken = (unsigned char *) cd_ptr;
+    cd_ptr += 1;
+    cd->name = cd_ptr;
+    cd_ptr += MAX_NAME_SIZE;
+    cd->input = cd_ptr; 
+    cd_ptr += INPUT_SIZE; 
+    cd->packet_ready = cd_ptr;
+    cd_ptr += 1;
+    cd->packet_buf = cd_ptr;
 }
 
 void print_shared_memory(shared_memory_config* sh_mem_cfg) {
@@ -276,19 +275,19 @@ void print_shared_memory(shared_memory_config* sh_mem_cfg) {
     client_data cd;
 
     printf("Client count: ");
-    print_bytes(sh_mem_cfg->client_count, SHARED_CLIENT_COUNT_SIZE);
+    print_bytes(sh_mem_cfg->client_count, 1);
 
     for (id = 0; id < MAX_CLIENTS; id++) {
-        cd = get_client_data(id, sh_mem_cfg);
+        get_client_data(id, sh_mem_cfg, &cd);
         printf("Taken: ");
-        print_bytes(cd.taken, SHARED_CLIENT_TAKEN_SIZE);
+        print_bytes(cd.taken, 1);
         printf("Name: ");
         print_bytes(cd.name, MAX_NAME_SIZE);
         printf("Input: ");
         print_bytes(cd.input, INPUT_SIZE);
         printf("Packet ready: ");
-        print_bytes(cd.packet_ready, SHARED_CLIENT_PACKET_READY_SIZE);
+        print_bytes(cd.packet_ready, 1);
         printf("Packet buffer: ");
-        print_bytes(cd.packet_buf, CLIENT_PACKET_MAX_SIZE);
+        print_bytes(cd.packet_buf, PACKET_FROM_CLIENT_MAX_SIZE);
     }
 }
