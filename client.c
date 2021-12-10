@@ -1,4 +1,5 @@
 #include "pong_client.h"
+#include "pong_networking.h"
 
 #include <stdio.h>
 #include <pthread.h>
@@ -11,6 +12,7 @@ int main(int argc, char **argv) {
     get_port_parameter(argc, argv, port);
     get_host_parameter(argc, argv, host);
 
+    /* establish connection with server */
     client_socket = get_client_socket(host, port);
     if (client_socket == -1) {
         printf(" Fatal ERROR: Could not open client socket - exiting...\n");
@@ -21,25 +23,22 @@ int main(int argc, char **argv) {
     client_shared_memory_config sh_mem_cfg;
     get_client_shared_memory(&sh_mem_cfg);
 
-    /* initialize packet receiving and sending threads */
-    client_thread_args cta;
-    cta.client_socket = client_socket;
-    cta.sh_mem_cfg = &sh_mem_cfg;
-
-    pthread_t receiving_thread_id;
-    if (pthread_create(&receiving_thread_id, NULL, receive_server_packets, (void *) &cta) != 0) {
-        printf("Error creating processing thread\n");
+    /* initialize packet receiving thread */
+    if (init_recv_thread(client_socket, &(sh_mem_cfg.recv_mem_cfg)) < 0) {
+        printf(" Fatal ERROR: Could not create packet receiving thread - exiting...\n");
         return -1;
     }
 
-    pthread_t sending_thread_id;
-    if (pthread_create(&sending_thread_id, NULL, send_client_packets, (void *) &cta) != 0) {
-        printf("Error creating sending thread\n");
+    /* initialize packet sending thread */
+    if (init_send_thread(client_socket, &(sh_mem_cfg.send_mem_cfg), send_client_packets) < 0) {
+        printf(" Fatal ERROR: Could not create packet sending thread - exiting...\n");
         return -1;
     }
 
     /* process already validated incoming packets */
     process_server_packets(&(sh_mem_cfg.recv_mem_cfg));
+
+    send_join("Raivis", &(sh_mem_cfg.send_mem_cfg));
 
     return 0;
 } 

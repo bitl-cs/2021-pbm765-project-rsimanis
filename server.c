@@ -5,7 +5,7 @@
 #include <unistd.h>
 
 int main(int argc, char **argv) {
-    shared_memory_config sh_mem_config;
+    server_shared_memory_config sh_mem_config;
     int pid = 0;
     char port[6] = DEFAULT_PORT;
 

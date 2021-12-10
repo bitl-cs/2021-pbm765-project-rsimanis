@@ -11,13 +11,14 @@
 #include <unistd.h>
 #include <netdb.h>
 #include <errno.h>
+#include <pthread.h>
 
 
 /* initialization */
 int get_port_parameter(int argc, char** argv, char* port){
     /* This function either leaves the port string as is (Should be set to DEFAULT_PORT), or changes it, if parameter -p=NEWPORT is set */
     int len, i, count;
-    char buf[30], name[30], val[30];
+    char buf[512], name[256], val[256];
 
     count = 0;
     for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
@@ -164,24 +165,25 @@ int get_client_socket(char *host, char *port){
     return client_socket;
 }
 
-void get_recv_mem_config(char *recv_mem, recv_memory_config *recv_mem_cfg) {
+void get_recv_memory_config(char *recv_mem, int32_t pdata_buflen, recv_memory_config *recv_mem_cfg) {
     char *recv_mem_ptr;
 
     recv_mem_ptr = recv_mem;
     recv_mem_cfg->recv_memory = recv_mem_ptr;
     recv_mem_cfg->packet_ready = recv_mem_ptr;
     recv_mem_ptr += 1;
-    recv_mem_cfg->packet_info.packet = recv_mem_ptr;
-    recv_mem_cfg->packet_info.pn = (uint32_t *) recv_mem_ptr;
+    recv_mem_cfg->packet = recv_mem_ptr;
+    recv_mem_cfg->pn = (uint32_t *) recv_mem_ptr;
     recv_mem_ptr += PACKET_NUMBER_SIZE;
-    recv_mem_cfg->packet_info.pid = (unsigned char *) recv_mem_ptr;
+    recv_mem_cfg->pid = (unsigned char *) recv_mem_ptr;
     recv_mem_ptr += PACKET_ID_SIZE;
-    recv_mem_cfg->packet_info.psize = (int32_t *) recv_mem_ptr;
+    recv_mem_cfg->psize = (int32_t *) recv_mem_ptr;
     recv_mem_ptr += PACKET_SIZE_SIZE;
-    recv_mem_cfg->packet_info.pdata = recv_mem_ptr;
+    recv_mem_cfg->pdata = recv_mem_ptr;
+    recv_mem_cfg->pdata_buflen = pdata_buflen;
 }
 
-void get_send_mem_config(char *send_mem, send_memory_config *send_mem_cfg) {
+void get_send_memory_config(char *send_mem, int32_t pdata_buflen, send_memory_config *send_mem_cfg) {
     char *send_mem_ptr;
 
     send_mem_ptr = send_mem;
@@ -190,15 +192,110 @@ void get_send_mem_config(char *send_mem, send_memory_config *send_mem_cfg) {
     send_mem_ptr += 1;
     send_mem_cfg->pid = (unsigned char *) send_mem_ptr;
     send_mem_ptr += PACKET_ID_SIZE;
-    send_mem_cfg->packet_data_size = (int32_t *) send_mem_ptr;
+    send_mem_cfg->datalen = (int32_t *) send_mem_ptr;
     send_mem_ptr += PACKET_SIZE_SIZE;
     send_mem_cfg->pdata = send_mem_ptr;
+    send_mem_cfg->pdata_buflen = pdata_buflen;
+}
+
+int init_recv_thread(int socket, recv_memory_config *recv_mem_cfg) {
+    recv_thread_args rta;
+    rta.socket = socket;
+    rta.recv_mem_cfg = recv_mem_cfg;
+
+    pthread_t receiving_thread_id;
+    if (pthread_create(&receiving_thread_id, NULL, receive_packets, (void *) &rta) != 0)
+        return -1;
+    return 0;
+}
+
+int init_send_thread(int socket, send_memory_config *send_mem_cfg, void *(*send_packets)(void *arg)) {
+    send_thread_args sta;
+    sta.socket = socket;
+    sta.send_mem_cfg = send_mem_cfg;
+
+    pthread_t sending_thread_id;
+    if (pthread_create(&sending_thread_id, NULL, send_packets, (void *) &sta) != 0)
+        return -1;
+    return 0;
+}
+
+/* validate incoming packets */
+void *receive_packets(void *arg) {
+    /* process thread arguments */
+    recv_thread_args *rta = (recv_thread_args *) arg;
+
+    /* initialize packet number counter for received packets */
+    uint32_t recv_pn = 0;
+
+    /* variables for code clarity */
+    int socket = rta->socket;
+    recv_memory_config *recv_mem_cfg = rta->recv_mem_cfg;
+    char *packet_ready = recv_mem_cfg->packet_ready;
+    char *packet = recv_mem_cfg->packet;
+    uint32_t *pn = recv_mem_cfg->pn;
+    int32_t *psize = recv_mem_cfg->psize;
+
+    /* variables for underlying algorithm */
+    char c = 0, prevc = 0;
+    int encoded_size = 0, decoded_size = 0;
+    char encoded_buf[2 * PACKET_MAX_SIZE];
+    char decoded_checksum;
+    int len, i = 0;
+
+    *packet_ready = 0;
+    while (1) {
+        if ((len = recv(socket, &c, sizeof(c), 0)) > 0) {
+            if (c == '-') {
+                if (prevc == '-') {
+                    /* wait until another packet is processed */
+                    while (*packet_ready) 
+                        sleep(PACKET_READY_WAIT_TIME);
+
+                    /* decode packet, put the result in shared memory */
+                    decoded_size = decode(encoded_buf, encoded_size, packet, PACKET_MAX_SIZE);
+
+                    /* extract checksum from packet's footer */
+                    decoded_checksum = packet[decoded_size - PACKET_CHECKSUM_SIZE];
+
+                    /* convert to host endianess */ 
+                    *pn = big_endian_to_host_uint32_t(*pn);
+                    *psize = big_endian_to_host_int32_t(*psize);
+
+                    /* verify packet */
+                    *packet_ready = verify_packet(recv_pn, recv_mem_cfg, decoded_size - PACKET_HEADER_SIZE - PACKET_FOOTER_SIZE, decoded_checksum);
+
+                    recv_pn++; /* TODO: need more checks if recv_pn overflows */
+                    encoded_size = i = prevc = 0;
+                    continue;
+                }
+            }
+            else {
+                if (prevc == '-') {
+                    encoded_buf[i++] = prevc;
+                    encoded_size++;
+                }
+                encoded_buf[i++] = c;
+                encoded_size++;
+            }
+            prevc = c;
+        }
+        else if (len == 0) {
+            printf("Server disconnected\n");
+            exit(0);
+        }
+        else {
+            printf("reading error\n");
+            exit(-1);
+        }
+    }
+    return NULL;
 }
 
 
 /* packet processing */
 /* send generic packet (data must be in network endianess) */
-void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size_t datalen, int socket) {
+void send_packet(uint32_t pn, int32_t psize, send_memory_config *send_mem_cfg, int socket) {
     char packet[PACKET_MAX_SIZE];
     char final_packet[2 * PACKET_MAX_SIZE + PACKET_SEPARATOR_SIZE]; /* assume that all characters in array "packet" could get encoded */ 
     size_t offset = 0;
@@ -208,7 +305,7 @@ void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size
     // print_bytes(packet, offset);
 
     /* add packet id */
-    offset += insert_char(pid, packet, sizeof(packet), offset); 
+    offset += insert_char(*(send_mem_cfg->pid), packet, sizeof(packet), offset); 
     // print_bytes(packet, offset);
 
     /* add the size of data segment */
@@ -216,16 +313,16 @@ void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size
     // print_bytes(packet, offset);
 
     /* add data (assumes that data is in network byte order) */
-    offset += insert_bytes(data, datalen, packet, sizeof(packet), offset);
+    offset += insert_bytes(send_mem_cfg->pdata, *(send_mem_cfg->datalen), packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* fill the unused data segment with null bytes */
-    offset += insert_null_bytes(psize - datalen, packet, sizeof(packet), offset);
+    offset += insert_null_bytes(psize - *(send_mem_cfg->datalen), packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
     // printf("%lu\n", offset);
 
     /* add checksum */
-    offset += insert_char(xor_checksum(packet, PACKET_HEADER_SIZE + datalen), packet, sizeof(packet), offset);
+    offset += insert_char(xor_checksum(packet, PACKET_HEADER_SIZE + *(send_mem_cfg->datalen)), packet, sizeof(packet), offset);
     // print_bytes(packet, offset);
 
     /* encode */
@@ -243,6 +340,78 @@ void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size
 
     /* send packet to socket */ 
     send(socket, final_packet, offset, 0);
+}
+
+void send_join(char *name, send_memory_config *send_mem_cfg) {
+    /* check if name is not too long */
+    size_t namelen = strlen(name);
+    if (namelen > MAX_NAME_SIZE - 1)
+        namelen = MAX_NAME_SIZE - 1;
+
+    /* wait until send buffer becomes available */
+    while (*(send_mem_cfg->packet_ready) == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    /* when send buffer is available, fill it with join packet data */
+    *(send_mem_cfg->pid) = PACKET_JOIN_ID;
+    *(send_mem_cfg->datalen) = namelen + 1;
+    insert_str(name, namelen, send_mem_cfg->pdata, send_mem_cfg->pdata_buflen, 0);
+    *(send_mem_cfg->packet_ready) = PACKET_READY_TRUE;
+}
+
+
+/* debug */
+void print_bytes(void *start, size_t len) {
+    size_t i;
+    char *s = (char *) start;
+
+    for (i = 0; i < len; i++)
+        printf("%02hhx ", s[i]);
+    putchar('\n');
+}
+
+void print_bytes_full(void *start, size_t len) {
+    size_t i;
+    char *s = (char *) start;
+
+    if (len > 999) {
+        printf("Cannot print more than 999 bytes! You asked for %lu\n", len);
+        return;
+    }
+
+    printf("Printing %lu bytes...\n", len);
+    printf("[NPK] [C] [HEX] [DEC] [ BINARY ]\n");
+    printf("================================\n");
+    for (i = 0; i < len; i++) {
+        printf(" %3lu | %c | %02X | %3d | %c%c%c%c%c%c%c%c\n", i, printable_char(s[i]), s[i], s[i],
+            s[i] & 0x80 ? '1' : '0',
+            s[i] & 0x40 ? '1' : '0',
+            s[i] & 0x20 ? '1' : '0',
+            s[i] & 0x10 ? '1' : '0',
+            s[i] & 0x08 ? '1' : '0',
+            s[i] & 0x04 ? '1' : '0',
+            s[i] & 0x02 ? '1' : '0',
+            s[i] & 0x01 ? '1' : '0'
+        );
+    }
+}
+
+void print_recv_memory(recv_memory_config *recv_mem_cfg) {
+    printf("PACKET_READY: %c\n", *(recv_mem_cfg->packet_ready));
+    printf("PN: %u\n", *(recv_mem_cfg->pn));
+    printf("PID: %u\n", (unsigned) *(recv_mem_cfg->pid));
+    printf("PSIZE: %d\n", *(recv_mem_cfg->psize));
+    printf("PDATA: ");
+    print_bytes(recv_mem_cfg->pdata, *(recv_mem_cfg->psize));
+    printf("PDATA_BUFLEN: %d\n", recv_mem_cfg->pdata_buflen);
+}
+
+void print_send_memory(send_memory_config *send_mem_cfg) {
+    printf("PACKET_READY: %c\n", *(send_mem_cfg->packet_ready));
+    printf("PID: %u\n", (unsigned) *(send_mem_cfg->pid));
+    printf("PACKET_DATALEN: %d\n", *(send_mem_cfg->datalen));
+    printf("PDATA: ");
+    print_bytes(send_mem_cfg->pdata, *(send_mem_cfg->datalen));
 }
 
 
@@ -310,65 +479,12 @@ char xor_checksum(char *data, size_t len) {
     return rez;
 }
 
-int verify_packet(uint32_t recv_pn, packet_info *packet_info, int32_t decoded_psize, char decoded_checksum) {
-    return (*(packet_info->pn) >= recv_pn) &&
-            (*(packet_info->psize) == decoded_psize) &&
-            (decoded_checksum == xor_checksum(packet_info->packet, decoded_psize));
+int verify_packet(uint32_t recv_pn, recv_memory_config *recv_mem_cfg, int32_t decoded_psize, char decoded_checksum) {
+    return (*(recv_mem_cfg->pn) >= recv_pn) &&
+            (*(recv_mem_cfg->psize) == decoded_psize) &&
+            (decoded_checksum == xor_checksum(recv_mem_cfg->packet, decoded_psize));
 }
 
-void get_packet_info(char *packet, packet_info *packet_info) {
-    char *packet_ptr;
-
-    packet_ptr = packet;
-    packet_info->packet = packet_ptr;
-    packet_info->pn = (uint32_t *) packet_ptr;
-    packet_ptr += PACKET_NUMBER_SIZE;
-    packet_info->pid = (unsigned char *) packet_ptr;
-    packet_ptr += PACKET_ID_SIZE;
-    packet_info->psize = (int32_t *) packet_ptr; 
-    packet_ptr += PACKET_SIZE_SIZE;
-    packet_info->pdata = packet_ptr;
-}
-
-
-/* debug */
-void print_bytes(void *start, size_t len) {
-    size_t i;
-    char *s = (char *) start;
-
-    for (i = 0; i < len; i++)
-        printf("%02hhx ", s[i]);
-    putchar('\n');
-}
-
-void print_bytes_full(void *start, size_t len) {
-    size_t i;
-    char *s = (char *) start;
-
-    if (len > 999) {
-        printf("Cannot print more than 999 bytes! You asked for %lu\n", len);
-        return;
-    }
-
-    printf("Printing %lu bytes...\n", len);
-    printf("[NPK] [C] [HEX] [DEC] [ BINARY ]\n");
-    printf("================================\n");
-    for (i = 0; i < len; i++) {
-        printf(" %3lu | %c | %02X | %3d | %c%c%c%c%c%c%c%c\n", i, printable_char(s[i]), s[i], s[i],
-            s[i] & 0x80 ? '1' : '0',
-            s[i] & 0x40 ? '1' : '0',
-            s[i] & 0x20 ? '1' : '0',
-            s[i] & 0x10 ? '1' : '0',
-            s[i] & 0x08 ? '1' : '0',
-            s[i] & 0x04 ? '1' : '0',
-            s[i] & 0x02 ? '1' : '0',
-            s[i] & 0x01 ? '1' : '0'
-        );
-    }
-}
-
-
-/* helpers */
 size_t insert_bytes(char *data, size_t datalen, char *buf, size_t buflen, size_t offset) {
     size_t i;
     for (i = 0; i < datalen && i + offset < buflen; i++)
@@ -389,7 +505,11 @@ size_t insert_char(char x, char *buf, size_t buflen, size_t offset) {
 }
 
 size_t insert_str(char *str, size_t strlen, char *buf, size_t buflen, size_t offset) {
-    return insert_bytes(str, strlen + 1, buf, buflen, offset); /* including null byte */
+    size_t i;
+
+    i = insert_bytes(str, strlen, buf, buflen, offset);
+    i += insert_null_bytes(1, buf, buflen, i);
+    return i;
 }
 
 size_t insert_null_bytes(int count, char *buf, size_t buflen, size_t offset) {

@@ -1,9 +1,9 @@
 #ifndef _MATH_H
 #define _MATH_H
 
-typedef struct _Vector2Di {
+typedef struct _vec2d_i {
     int x;
     int y;
-} Vector2D;
+} vec2d_i;
 
 #endif

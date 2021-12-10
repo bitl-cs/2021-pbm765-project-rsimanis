@@ -1,22 +1,25 @@
-SERVER_PROGRAM = server.c
-SERVER_EXECUTABLE = server
+SERVER_MAIN = server.c
+SERVER_EXE = server
 
-CLIENT_PROGRAM = client.c
-CLIENT_EXECUTABLE = client
+CLIENT_MAIN = client.c
+CLIENT_EXE = client
 
 CFLAGS = -std=gnu11 -fno-common -Wall -Wextra
-CFILES_SERVER = $(SERVER_PROGRAM) args.c pong_server.c pong_networking.c pong_math.c pong_game.c -lpthread
-CFILES_CLIENT = $(CLIENT_PROGRAM) args.c pong_client.c pong_networking.c pong_math.c pong_game.c -lpthread
+LDFLAGS = -lpthread
 
-all: $(SERVER_EXECUTABLE) $(CLIENT_EXECUTABLE)
+CFILES_BOTH = args.c pong_networking.c pong_math.c pong_game.c 
+CFILES_SERVER = $(CFILES_BOTH) pong_server.c $(SERVER_MAIN)
+CFILES_CLIENT = $(CFILES_BOTH) pong_client.c $(CLIENT_MAIN)
 
-$(SERVER_EXECUTABLE): $(CFILES_SERVER)
-	@gcc $(CFLAGS) -o $(SERVER_EXECUTABLE) $(CFILES_SERVER) 
+all: $(SERVER_EXE) $(CLIENT_EXE)
 
-$(CLIENT_EXECUTABLE): $(CFILES_CLIENT)
-	@gcc $(CFLAGS) -o $(CLIENT_EXECUTABLE) $(CFILES_CLIENT) 
+$(SERVER_EXE): $(CFILES_SERVER)
+	@gcc $(CFLAGS) $(LDFLAGS) -o $(SERVER_EXE) $(CFILES_SERVER)
+
+$(CLIENT_EXE): $(CFILES_CLIENT)
+	@gcc $(CFLAGS) $(LDFLAGS) -o $(CLIENT_EXE) $(CFILES_CLIENT)
 
 .PHONY: clean
 
 clean: 
-	rm $(SERVER_EXECUTABLE) $(CLIENT_EXECUTABLE)
+	rm $(SERVER_EXE) $(CLIENT_EXE)

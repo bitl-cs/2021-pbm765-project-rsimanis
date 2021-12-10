@@ -1,24 +1,22 @@
-#include "pong_networking.h"
 #include "pong_server.h"
 #include "pong_game.h"
+#include "pong_networking.h"
 
 #include <stdio.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <sys/socket.h>
 #include <sys/wait.h>
 #include <arpa/inet.h>
 #include <errno.h>
-#include <string.h>
 #include <sys/mman.h>
-#include <pthread.h>
 
 
-void get_shared_memory(shared_memory_config* sh_mem_cfg) {
+/* init */
+void get_shared_memory(server_shared_memory_config* sh_mem_cfg) {
     char *sh_mem_ptr;
     int id;
 
-    sh_mem_ptr = mmap(NULL, SERVER_SHARED_MEMORY_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
+    sh_mem_ptr = (char *) mmap(NULL, SERVER_SHARED_MEMORY_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
     sh_mem_cfg->shared_memory = sh_mem_ptr;
     sh_mem_cfg->client_count = (unsigned char *) sh_mem_ptr;
     sh_mem_ptr += 1;
@@ -31,14 +29,7 @@ void get_shared_memory(shared_memory_config* sh_mem_cfg) {
         *(get_client_data_ptr(id, sh_mem_cfg)) = 0; /* first byte represents if the slot is taken */
 }
 
-void gameloop(shared_memory_config *sh_mem_cfg) {
-    printf("Starting game loop! (It will run forever - use Ctrl+C)\n");
-    while (1) {
-        // loop forever
-    }
-}
-
-void start_network(char *port, shared_memory_config *sh_mem_cfg) {
+void start_network(char *port, server_shared_memory_config *sh_mem_cfg) {
     int server_socket;
 
     server_socket = -1;
@@ -53,7 +44,18 @@ void start_network(char *port, shared_memory_config *sh_mem_cfg) {
     printf(" Stopped accepting clients (Should not happen!) - server network stopped!\n");
 }
 
-void accept_clients(int server_socket, shared_memory_config *sh_mem_cfg) {
+
+/* game */
+void gameloop(server_shared_memory_config *sh_mem_cfg) {
+    printf("Starting game loop! (It will run forever - use Ctrl+C)\n");
+    while (1) {
+        // loop forever
+    }
+}
+
+
+/* client processing */
+void accept_clients(int server_socket, server_shared_memory_config *sh_mem_cfg) {
     int new_client_id = 0;
     int tid = 0;
     int client_socket = -1;
@@ -75,10 +77,7 @@ void accept_clients(int server_socket, shared_memory_config *sh_mem_cfg) {
             continue;
         }
         *(sh_mem_cfg->client_count) += 1;
-
-        client_data cd;
-        get_client_data(new_client_id, sh_mem_cfg, &cd);
-        *(cd.taken) = 1;
+        *get_client_data_ptr(new_client_id, sh_mem_cfg) = 1;
 
         /* We have a client connection - doublefork&orphan to process it, main thread closes socket and listens for a new one */
         tid = fork();
@@ -88,7 +87,7 @@ void accept_clients(int server_socket, shared_memory_config *sh_mem_cfg) {
             tid = fork();
             if(tid == 0){
                 /* NOTE: ideally You would check if clients disconnect and reduce client_count to allow new connections, this is not yet implemented */
-                process_client(new_client_id, client_socket, sh_mem_cfg, cd);
+                process_client(new_client_id, client_socket, sh_mem_cfg);
                 exit(0);
             }
             else {
@@ -105,136 +104,28 @@ void accept_clients(int server_socket, shared_memory_config *sh_mem_cfg) {
     }
 }
 
-void process_client(int id, int socket, shared_memory_config* sh_mem_cfg, client_data client_data) {
-    printf("Processing client id=%d, socket=%d\n", id, socket);
-    // printf("CLIENT count %d\n", *(sh_mem_cfg->client_count));
+void process_client(int id, int socket, server_shared_memory_config* sh_mem_cfg) {
+    client_data cl_data;
+    get_client_data(id, sh_mem_cfg, &cl_data);
 
-    int32_t *pn = (int32_t *) (client_data.packet_buf);
-    int32_t *pid = (int32_t *) (client_data.packet_buf + PACKET_NUMBER_SIZE);
-    int32_t *psize = (int32_t *) (client_data.packet_buf + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
-
-    char recv_buf[2 * PACKET_FROM_CLIENT_MAX_SIZE];
-    int recv_pn = -1, send_pn = -1;
-
-    char c = 0, prevc = 0;
-    long encoded_size = 0, decoded_size = 0;
-    int len, i = 0;
-
-    *(client_data.packet_ready) = 0;
-
-    /* create a thread for validated packet processing */
-    proc_inc_packets_args pra;
-    pra.id = id;
-    pra.socket = socket;
-    pra.send_pn = send_pn;
-    pra.client_data = &client_data;
-    pthread_t processing_thread_id;
-    if (pthread_create(&processing_thread_id, NULL, process_incoming_client_packets, (void *) &pra) != 0) {
-        printf("Error creating thread\n");
-        remove_client(id, socket, sh_mem_cfg);
-        exit(1);
+    /* initialize packet receiving thread */
+    if (init_recv_thread(socket, &(cl_data.recv_mem_cfg)) < 0) {
+        printf(" Fatal ERROR: Could not create packet receiving thread (id=%d) - exiting...\n", id);
+        exit(-1);
     }
 
-    /* receive and validate incoming packets */
-    while (1) {
-        if ((len = recv(socket, &c, 1, 0)) > 0) {
-            if (c == '-') {
-                if (prevc == '-') {
-                    recv_pn++; /* TODO: need more checks if recv_pn overflows */
-
-                    while (*(client_data.packet_ready)) /* another packet is being processed */
-                        sleep(1.0/100);
-
-                    decoded_size = decode(recv_buf, encoded_size, client_data.packet_buf, PACKET_FROM_CLIENT_MAX_SIZE); /* decode packet, put the result in shared memory */
-
-                    /* convert to host endianess */ 
-                    *pn = network_to_host_uint32_t(*pn);
-                    *psize = network_to_host_int32_t(*psize);
-
-                    *(client_data.packet_ready) = verify_packet(recv_pn, &packet_info, decoded_size - PACKET_HEADER_SIZE, decoded_checksum); /* verify packet */
-
-                    encoded_size = i = prevc = 0;
-                    continue;
-                }
-            }
-            else {
-                if (prevc == '-') {
-                    recv_buf[i++] = prevc;
-                    encoded_size++;
-                }
-                recv_buf[i++] = c;
-                encoded_size++;
-            }
-            prevc = c;
-        }
-        else if (len == 0) {
-            printf("Client id=%d disconnected\n", id);
-            remove_client(id, socket, sh_mem_cfg);
-            exit(0);
-        }
-        else {
-            printf("Error receiving data from client id=%d", id);
-            remove_client(id, socket, sh_mem_cfg);
-            exit(-1);
-        }
+    /* initialize packet sending thread */
+    if (init_send_thread(socket, &(cl_data.send_mem_cfg), send_server_packets) < 0) {
+        printf(" Fatal ERROR: Could not create packet sending thread (id=%d)- exiting...\n", id);
+        exit(-1);
     }
+
+    /* process already validated incoming packets */
+    process_client_packets(&(cl_data.recv_mem_cfg));
 }
 
-void *process_incoming_client_packets(void *arg) {
-    /* process arguments */
-    proc_inc_packets_args *args = (proc_inc_packets_args *) arg;
-    int id = args->id;
-    int socket = args->socket;
-    int send_pn = args->send_pn;
-    client_data *client_data = args->client_data;
 
-    int *pid = (int *) (client_data->packet_buf + PACKET_NUMBER_SIZE);   /* pointer to packet id */
-    char *data = client_data->packet_buf + PACKET_HEADER_SIZE;           /* pointer to data segment */
-
-    while(1) {
-        if (*(client_data->packet_ready)) {
-            switch (*pid) {
-                case 1:
-                    process_join(data);
-                    // print_bytes(shared_recv_buf, JOIN_PACKET_SIZE);
-                    // send_lobby(0, NULL, ++send_pn, socket);
-                    // send_lobby(1, "bla bla", ++send_pn, socket);
-                    // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
-                    // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
-                    // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
-                    // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
-                    // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
-                    // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
-                    // send_lobby(1, "super gars errrrrrors", ++send_pn, socket);
-                    break;
-                case 3:
-                    // print_bytes(shared_recv_buf, GAME_TYPE_PACKET_SIZE);
-                    // process_game_type(data);
-                    // print_bytes(shared_recv_buf, GAME_TYPE_PACKET_SIZE);
-                    // send_player_queue(1, "XD", ++send_pn, socket);
-                    break;
-                case 6:
-                    process_player_ready();
-                    // print_bytes(shared_recv_buf, PLAYER_READY_PACKET_SIZE);
-                    // send_game_ready(1, "ERROR: SLIKTI!", ++send_pn, socket);
-                    break;
-                case 8:
-                    process_player_input(data);
-                    // print_bytes(shared_recv_buf, PLAYER_INPUT_PACKET_SIZE);
-                    break;
-                case 9:
-                    process_check_status();
-                    break;
-                default:
-                    printf("Invalid pid (%d)\n", *pid);
-            }
-            *(client_data->packet_ready) = 0;
-        }
-        sleep(1.0/100);
-    }
-}
-
-int find_free_client_id(shared_memory_config *sh_mem_cfg) {
+int find_free_client_id(server_shared_memory_config *sh_mem_cfg) {
     int id;
 
     for (id = 0; id < MAX_CLIENTS; id++) {
@@ -244,50 +135,146 @@ int find_free_client_id(shared_memory_config *sh_mem_cfg) {
     return -1;
 }
 
-void remove_client(int id, int socket, shared_memory_config *sh_mem_cfg) {
+void remove_client(int id, int socket, server_shared_memory_config *sh_mem_cfg) {
     *(get_client_data_ptr(id, sh_mem_cfg)) = 0;
     (*(sh_mem_cfg->client_count))--;
     close(socket);
 }
 
-char *get_client_data_ptr(int id, shared_memory_config *sh_mem_cfg) {
+char *get_client_data_ptr(int id, server_shared_memory_config *sh_mem_cfg) {
     return sh_mem_cfg->shared_client_data + SERVER_SHARED_CLIENT_DATA_SIZE * id;
 }
 
-void get_client_data(int id, shared_memory_config *sh_mem_cfg, client_data *cd) {
+void get_client_data(int id, server_shared_memory_config *sh_mem_cfg, client_data *cd) {
     char *cd_ptr;
 
     cd_ptr = get_client_data_ptr(id, sh_mem_cfg);
     cd->client_data = cd_ptr;
     cd->taken = (unsigned char *) cd_ptr;
-    cd_ptr += 1;
+    cd_ptr += CLIENT_TAKEN_SIZE;
     cd->name = cd_ptr;
     cd_ptr += MAX_NAME_SIZE;
     cd->input = cd_ptr; 
     cd_ptr += INPUT_SIZE; 
-    cd->packet_ready = cd_ptr;
-    cd_ptr += 1;
-    cd->packet_buf = cd_ptr;
+    cd->state = cd_ptr;
+    cd_ptr += CLIENT_STATE_SIZE;
+    get_recv_memory_config(cd_ptr, SERVER_RECV_MEMORY_SIZE, &(cd->recv_mem_cfg));
+    cd_ptr += SERVER_RECV_MEMORY_SIZE;
+    get_send_memory_config(cd_ptr, SERVER_SEND_MEMORY_SIZE, &(cd->send_mem_cfg));
 }
 
-void print_shared_memory(shared_memory_config* sh_mem_cfg) {
+/* packet processing */
+void *send_server_packets(void *arg) {
+    /* process thread arguments */
+    send_thread_args *sta = (send_thread_args *) arg;
+    int socket = sta->socket;
+    send_memory_config *send_mem_cfg = sta->send_mem_cfg;
+
+    /* initialize packet number counter for sent packets */
+    uint32_t send_pn = 0;
+
+    *(send_mem_cfg->packet_ready) = PACKET_READY_FALSE;
+    while(1) {
+        if (*(send_mem_cfg->packet_ready) == PACKET_READY_TRUE) {
+            if (*(send_mem_cfg->pid) == PACKET_ACCEPT_ID)
+                send_packet(send_pn++, PACKET_ACCEPT_DATA_SIZE, send_mem_cfg, socket);
+            else if (*(send_mem_cfg->pid) == PACKET_MESSAGE_ID)
+                send_packet(send_pn++, PACKET_MESSAGE_DATA_SIZE, send_mem_cfg, socket);
+            else if (*(send_mem_cfg->pid) == PACKET_LOBBY_ID ||
+                        *(send_mem_cfg->pid) == PACKET_GAME_READY_ID ||
+                        *(send_mem_cfg->pid) == PACKET_GAME_STATE_ID ||
+                        *(send_mem_cfg->pid) == PACKET_GAME_END_ID)
+                send_packet(send_pn++, *(send_mem_cfg->datalen), send_mem_cfg, socket);
+            else
+                printf("Invalid pid (%u)\n", (unsigned) *(send_mem_cfg->pid));
+            *(send_mem_cfg->packet_ready) = PACKET_READY_FALSE;
+        }
+        else
+            sleep(PACKET_READY_WAIT_TIME);
+    }
+
+    return NULL;
+}
+
+void process_client_packets(recv_memory_config *recv_mem_cfg) {
+    while (1) {
+        if (*(recv_mem_cfg->packet_ready) == PACKET_READY_TRUE) {
+            switch (*(recv_mem_cfg->pid)) {
+                case PACKET_JOIN_ID:
+                    process_join(recv_mem_cfg->pdata);
+                    break;
+                case PACKET_MESSAGE_ID:
+                    process_message_from_client(recv_mem_cfg->pdata);
+                    break;
+                case PACKET_PLAYER_READY_ID:
+                    process_player_ready();
+                    break;
+                case PACKET_PLAYER_INPUT_ID:
+                    process_player_input(recv_mem_cfg->pdata);
+                    break;
+                case PACKET_CHECK_STATUS_ID:
+                    process_check_status();
+                    break;
+                default:
+                    printf("Invalid pid (%u)\n", (unsigned) *(recv_mem_cfg->pid));
+            }
+            *(recv_mem_cfg->packet_ready) = PACKET_READY_FALSE;
+        }
+        else
+            sleep(PACKET_READY_WAIT_TIME);
+    }
+}
+
+void process_join(char *data) {
+    char *name = data;
+    printf("RECEIVED JOIN, NAME = %s", name);
+    /* if state == 0 */
+        /* add username to client_data */ 
+        /* change state */
+        /* send accept packet as response */
+}
+
+void process_message_from_client(char *data) {
+
+}
+
+void process_player_ready(void) {
+
+}
+
+void process_player_input(char *data) {
+
+}
+
+void process_check_status(void) {
+
+}
+
+/* debug */
+void print_client_data(client_data *cd) {
+    printf("TAKEN: %c\n", *(cd->taken));
+    printf("NAME %s\n", cd->name);
+    printf("INPUT: %c\n", *(cd->input));
+    printf("STATE: %c\n", *(cd->state));
+    print_recv_memory(&(cd->recv_mem_cfg));
+    print_send_memory(&(cd->send_mem_cfg));
+}
+
+void print_shared_memory(server_shared_memory_config* sh_mem_cfg) {
     int id;
     client_data cd;
 
+    /* print client count */
     printf("Client count: ");
     print_bytes(sh_mem_cfg->client_count, 1);
+    putchar('\n');
 
+    /* print client datas */
     for (id = 0; id < MAX_CLIENTS; id++) {
-        get_client_data(id, sh_mem_cfg, &cd);
-        printf("Taken: ");
-        print_bytes(cd.taken, 1);
-        printf("Name: ");
-        print_bytes(cd.name, MAX_NAME_SIZE);
-        printf("Input: ");
-        print_bytes(cd.input, INPUT_SIZE);
-        printf("Packet ready: ");
-        print_bytes(cd.packet_ready, 1);
-        printf("Packet buffer: ");
-        print_bytes(cd.packet_buf, PACKET_FROM_CLIENT_MAX_SIZE);
+        print_client_data(&cd);
+        putchar('\n');
     }
+    putchar('\n');
+
+    /* TODO: print game states */
 }
