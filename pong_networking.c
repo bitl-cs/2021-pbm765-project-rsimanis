@@ -5,13 +5,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <unistd.h>
 #include <netdb.h>
 #include <errno.h>
 #include <pthread.h>
+#include <limits.h>
 
 
 /* initialization */
@@ -154,7 +152,6 @@ int get_client_socket(char *host, char *port){
         printf("ERROR conneting to socket! ERRNO=%d\n", errno);
         close(client_socket); /* could not connect to socket - close and try another one */
     }
-
     /* clean up */
     if(a == NULL) { /* All connections failed */
         printf("No connection was made - cleaning up...\n");
@@ -198,141 +195,53 @@ void get_send_memory_config(char *send_mem, int32_t pdata_buflen, send_memory_co
     send_mem_cfg->pdata_buflen = pdata_buflen;
 }
 
-int init_recv_thread(int socket, recv_memory_config *recv_mem_cfg) {
-    recv_thread_args rta;
-    rta.socket = socket;
-    rta.recv_mem_cfg = recv_mem_cfg;
-
-    pthread_t receiving_thread_id;
-    if (pthread_create(&receiving_thread_id, NULL, receive_packets, (void *) &rta) != 0)
-        return -1;
-    return 0;
-}
-
-int init_send_thread(int socket, send_memory_config *send_mem_cfg, void *(*send_packets)(void *arg)) {
-    send_thread_args sta;
-    sta.socket = socket;
-    sta.send_mem_cfg = send_mem_cfg;
-
-    pthread_t sending_thread_id;
-    if (pthread_create(&sending_thread_id, NULL, send_packets, (void *) &sta) != 0)
-        return -1;
-    return 0;
-}
-
-/* validate incoming packets */
-void *receive_packets(void *arg) {
-    /* process thread arguments */
-    recv_thread_args *rta = (recv_thread_args *) arg;
-
-    /* initialize packet number counter for received packets */
-    uint32_t recv_pn = 0;
-
-    /* variables for code clarity */
-    int socket = rta->socket;
-    recv_memory_config *recv_mem_cfg = rta->recv_mem_cfg;
-    char *packet_ready = recv_mem_cfg->packet_ready;
-    char *packet = recv_mem_cfg->packet;
-    uint32_t *pn = recv_mem_cfg->pn;
-    int32_t *psize = recv_mem_cfg->psize;
-
-    /* variables for underlying algorithm */
-    char c = 0, prevc = 0;
-    int encoded_size = 0, decoded_size = 0;
-    char encoded_buf[2 * PACKET_MAX_SIZE];
-    char decoded_checksum;
-    int len, i = 0;
-
-    *packet_ready = 0;
-    while (1) {
-        if ((len = recv(socket, &c, sizeof(c), 0)) > 0) {
-            if (c == '-') {
-                if (prevc == '-') {
-                    /* wait until another packet is processed */
-                    while (*packet_ready) 
-                        sleep(PACKET_READY_WAIT_TIME);
-
-                    /* decode packet, put the result in shared memory */
-                    decoded_size = decode(encoded_buf, encoded_size, packet, PACKET_MAX_SIZE);
-
-                    /* extract checksum from packet's footer */
-                    decoded_checksum = packet[decoded_size - PACKET_CHECKSUM_SIZE];
-
-                    /* convert to host endianess */ 
-                    *pn = big_endian_to_host_uint32_t(*pn);
-                    *psize = big_endian_to_host_int32_t(*psize);
-
-                    /* verify packet */
-                    *packet_ready = verify_packet(recv_pn, recv_mem_cfg, decoded_size - PACKET_HEADER_SIZE - PACKET_FOOTER_SIZE, decoded_checksum);
-
-                    recv_pn++; /* TODO: need more checks if recv_pn overflows */
-                    encoded_size = i = prevc = 0;
-                    continue;
-                }
-            }
-            else {
-                if (prevc == '-') {
-                    encoded_buf[i++] = prevc;
-                    encoded_size++;
-                }
-                encoded_buf[i++] = c;
-                encoded_size++;
-            }
-            prevc = c;
-        }
-        else if (len == 0) {
-            printf("Server disconnected\n");
-            exit(0);
-        }
-        else {
-            printf("reading error\n");
-            exit(-1);
-        }
-    }
-    return NULL;
-}
-
 
 /* packet processing */
 /* send generic packet (data must be in network endianess) */
-void send_packet(uint32_t pn, int32_t psize, send_memory_config *send_mem_cfg, int socket) {
-    char packet[PACKET_MAX_SIZE];
-    char final_packet[2 * PACKET_MAX_SIZE + PACKET_SEPARATOR_SIZE]; /* assume that all characters in array "packet" could get encoded */ 
+void send_packet(uint32_t pn, int32_t psize, send_memory_config *send_mem_cfg, char *packet, size_t packet_size, char *final_packet, size_t final_packet_size, int socket) {
     size_t offset = 0;
 
     /* add packet number */
-    offset += insert_uint32_t_as_big_endian(pn, packet, sizeof(packet), offset);
+    offset += insert_uint32_t_as_big_endian(pn, packet, packet_size, offset);
     // print_bytes(packet, offset);
 
     /* add packet id */
-    offset += insert_char(*(send_mem_cfg->pid), packet, sizeof(packet), offset); 
+    offset += insert_char(*(send_mem_cfg->pid), packet, packet_size, offset); 
     // print_bytes(packet, offset);
 
     /* add the size of data segment */
-    offset += insert_int32_t_as_big_endian(psize, packet, sizeof(packet), offset);
+    offset += insert_int32_t_as_big_endian(psize, packet, packet_size, offset);
     // print_bytes(packet, offset);
 
     /* add data (assumes that data is in network byte order) */
-    offset += insert_bytes(send_mem_cfg->pdata, *(send_mem_cfg->datalen), packet, sizeof(packet), offset);
+    offset += insert_bytes(send_mem_cfg->pdata, *(send_mem_cfg->datalen), packet, packet_size, offset);
+    // print_int("datalen", *(send_mem_cfg->datalen));
     // print_bytes(packet, offset);
 
     /* fill the unused data segment with null bytes */
-    offset += insert_null_bytes(psize - *(send_mem_cfg->datalen), packet, sizeof(packet), offset);
+    offset += insert_null_bytes(psize - *(send_mem_cfg->datalen), packet, packet_size, offset);
+    // print_int("rem datalen", psize - *(send_mem_cfg->datalen));
+    // print_int("offset", offset);
     // print_bytes(packet, offset);
     // printf("%lu\n", offset);
 
     /* add checksum */
-    offset += insert_char(xor_checksum(packet, PACKET_HEADER_SIZE + *(send_mem_cfg->datalen)), packet, sizeof(packet), offset);
+    offset += insert_char(xor_checksum(packet, PACKET_HEADER_SIZE + *(send_mem_cfg->datalen)), packet, packet_size, offset);
+    // printf("before encoding: \n");
     // print_bytes(packet, offset);
 
     /* encode */
-    offset = encode(packet, offset, final_packet, sizeof(final_packet) - PACKET_SEPARATOR_SIZE);
+    offset = encode(packet, offset, final_packet, final_packet_size - PACKET_SEPARATOR_SIZE);
+    // printf("after encoding: \n");
     // print_bytes(final_packet, offset);
     // printf("%lu\n", offset);
 
     /* add separator */
-    offset += insert_separator(final_packet, sizeof(final_packet), offset);
+    offset += insert_separator(final_packet, final_packet_size, offset);
+    // printf("after separator: \n");
+    // printf("Packet sent (pid=%d): ", *(send_mem_cfg->pid));
     // print_bytes(final_packet, offset);
+
     // printf("%lu\n", offset);
     // putchar('\n');
     // print_bytes_full(final_packet, offset);
@@ -341,7 +250,6 @@ void send_packet(uint32_t pn, int32_t psize, send_memory_config *send_mem_cfg, i
     /* send packet to socket */ 
     send(socket, final_packet, offset, 0);
 }
-
 void send_join(char *name, send_memory_config *send_mem_cfg) {
     /* check if name is not too long */
     size_t namelen = strlen(name);
@@ -354,11 +262,61 @@ void send_join(char *name, send_memory_config *send_mem_cfg) {
 
     /* when send buffer is available, fill it with join packet data */
     *(send_mem_cfg->pid) = PACKET_JOIN_ID;
-    *(send_mem_cfg->datalen) = namelen + 1;
-    insert_str(name, namelen, send_mem_cfg->pdata, send_mem_cfg->pdata_buflen, 0);
+    *(send_mem_cfg->datalen) = insert_str(name, namelen, send_mem_cfg->pdata, send_mem_cfg->pdata_buflen, 0);
     *(send_mem_cfg->packet_ready) = PACKET_READY_TRUE;
 }
 
+void send_accept(char player_id, send_memory_config *send_mem_cfg) {
+    while (*(send_mem_cfg->packet_ready) == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    *(send_mem_cfg->pid) = PACKET_ACCEPT_ID;
+    *(send_mem_cfg->datalen) = insert_char(player_id, send_mem_cfg->pdata, send_mem_cfg->pdata_buflen, 0);
+    *(send_mem_cfg->packet_ready) = PACKET_READY_TRUE;
+}
+
+void send_message(char type, char source_id, char *message, send_memory_config *send_mem_cfg) {
+    size_t mlen = strlen(message);
+    if (mlen > MAX_MESSAGE_SIZE - 1)
+        mlen = MAX_MESSAGE_SIZE - 1;
+
+    while (*(send_mem_cfg->packet_ready) == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    *(send_mem_cfg->pid) = PACKET_MESSAGE_ID;
+    *(send_mem_cfg->datalen) = insert_char(type, send_mem_cfg->pdata, send_mem_cfg->pdata_buflen, 0); 
+    *(send_mem_cfg->datalen) += insert_char(source_id, send_mem_cfg->pdata, send_mem_cfg->pdata_buflen, *(send_mem_cfg->datalen)); 
+    *(send_mem_cfg->datalen) += insert_str(message, mlen, send_mem_cfg->pdata, send_mem_cfg->pdata_buflen, *(send_mem_cfg->datalen)); 
+    *(send_mem_cfg->packet_ready) = PACKET_READY_TRUE;
+}
+
+void send_lobby(game_lobby *game_lobby, send_memory_config *send_mem_cfg) {
+
+}
+
+void send_game_ready(game_state *game_state, send_memory_config *send_mem_cfg) {
+
+}
+
+void send_player_ready(char player_id, send_memory_config *send_mem_cfg) {
+
+}
+
+void send_game_state(game_state *game_state, send_memory_config *send_mem_cfg) {
+
+}
+
+void send_player_input(char input, send_memory_config *send_mem_cfg) {
+
+}
+
+void send_check_status(send_memory_config *send_mem_cfg) {
+
+}
+
+void send_game_end(game_state *game_state, send_memory_config *send_mem_cfg) {
+
+}
 
 /* debug */
 void print_bytes(void *start, size_t len) {
@@ -414,6 +372,25 @@ void print_send_memory(send_memory_config *send_mem_cfg) {
     print_bytes(send_mem_cfg->pdata, *(send_mem_cfg->datalen));
 }
 
+void here() {
+    printf("here\n");
+}
+
+void printint(char *tag, int x) {
+    printf("%s: %d\n", tag, x);
+}
+
+void printfloat(char *tag, float x) {
+    printf("%s: %f\n", tag, x);
+}
+
+void printstr(char *str) {
+    printf("%s\n", str);
+}
+
+void printstrt(char *tag, char *str) {
+    printf("%s: %s\n", tag, str);
+}
 
 /* utilities */
 int encode(char *data, size_t datalen, char *buf, size_t buflen) {
@@ -480,9 +457,12 @@ char xor_checksum(char *data, size_t len) {
 }
 
 int verify_packet(uint32_t recv_pn, recv_memory_config *recv_mem_cfg, int32_t decoded_psize, char decoded_checksum) {
+    // printf("PN: %d %d\n", *(recv_mem_cfg->pn), recv_pn);
+    // printf("PS: %d %d\n", *(recv_mem_cfg->psize), decoded_psize);
+    // printf("CH: %d %d\n", decoded_checksum, xor_checksum(recv_mem_cfg->packet,PACKET_HEADER_SIZE + decoded_psize));
     return (*(recv_mem_cfg->pn) >= recv_pn) &&
             (*(recv_mem_cfg->psize) == decoded_psize) &&
-            (decoded_checksum == xor_checksum(recv_mem_cfg->packet, decoded_psize));
+            (decoded_checksum == xor_checksum(recv_mem_cfg->packet, PACKET_HEADER_SIZE + decoded_psize));
 }
 
 size_t insert_bytes(char *data, size_t datalen, char *buf, size_t buflen, size_t offset) {
@@ -505,11 +485,11 @@ size_t insert_char(char x, char *buf, size_t buflen, size_t offset) {
 }
 
 size_t insert_str(char *str, size_t strlen, char *buf, size_t buflen, size_t offset) {
-    size_t i;
+    size_t off;
 
-    i = insert_bytes(str, strlen, buf, buflen, offset);
-    i += insert_null_bytes(1, buf, buflen, i);
-    return i;
+    off = insert_bytes(str, strlen, buf, buflen, offset);
+    off += insert_null_bytes(1, buf, buflen, offset + off);
+    return off;
 }
 
 size_t insert_null_bytes(int count, char *buf, size_t buflen, size_t offset) {

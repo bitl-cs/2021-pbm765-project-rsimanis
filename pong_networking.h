@@ -3,33 +3,37 @@
 
 #include "pong_game.h"
 
-#include "inttypes.h"
+#include <inttypes.h>
 #include <stddef.h>
 #include <limits.h>
 #include <stdint.h>
+#include <pthread.h>
 
 
-#define MAX_CLIENTS                         1
+#define MAX_CLIENTS                         5
 
 /* general */
 #define PACKET_NUMBER_SIZE                  4 
 #define PACKET_ID_SIZE                      1 
 #define PACKET_SIZE_SIZE                    4 
-#define PACKET_CHECKSUM_SIZE                1 
+#define PACKET_CHECKSUM_SIZE                1
 #define PACKET_HEADER_SIZE                  (PACKET_NUMBER_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE)
 #define PACKET_FOOTER_SIZE                  PACKET_CHECKSUM_SIZE
 #define PACKET_SEPARATOR_SIZE               (sizeof(PACKET_SEPARATOR) - 1)
 
-#define PACKET_MAX_SIZE                     PACKET_GAME_STATE_MAX_SIZE 
-#define PACKET_MAX_DATA_SIZE                PACKET_GAME_STATE_MAX_DATA_SIZE
+#define PACKET_MAX_SIZE                     PACKET_MESSAGE_SIZE 
+#define PACKET_MAX_DATA_SIZE                PACKET_MESSAGE_DATA_SIZE
 #define PACKET_FROM_CLIENT_MAX_SIZE         PACKET_MESSAGE_SIZE
 #define PACKET_FROM_CLIENT_MAX_DATA_SIZE    PACKET_MESSAGE_DATA_SIZE
-#define PACKET_FROM_SERVER_MAX_SIZE         PACKET_GAME_STATE_MAX_SIZE
-#define PACKET_FROM_SERVER_MAX_DATA_SIZE    PACKET_GAME_STATE_MAX_DATA_SIZE
+#define PACKET_FROM_SERVER_MAX_SIZE         PACKET_MESSAGE_SIZE
+#define PACKET_FROM_SERVER_MAX_DATA_SIZE    PACKET_MESSAGE_DATA_SIZE
 
+#define PACKET_READY_SIZE                   1
 #define PACKET_READY_TRUE                   1
 #define PACKET_READY_FALSE                  0
 #define PACKET_READY_WAIT_TIME              1/100.0
+
+#define THREAD_INIT_WAIT_TIME               1/4.0
 
 #define DEFAULT_PORT                        "12345"
 #define DEFAULT_IP                          "127.0.0.1"
@@ -89,11 +93,6 @@ typedef struct _send_memory_config {
     int32_t pdata_buflen;
 } send_memory_config;
 
-typedef struct _recv_thread_args {
-    int socket;
-    recv_memory_config *recv_mem_cfg;
-} recv_thread_args;
-
 typedef struct _send_thread_args {
     int socket;
     send_memory_config *send_mem_cfg;
@@ -107,28 +106,30 @@ int get_server_socket(char *port);
 int get_client_socket(char *host, char *port);
 void get_recv_memory_config(char *recv_mem, int32_t pdata_buflen, recv_memory_config *recv_mem_cfg);
 void get_send_memory_config(char *send_mem, int32_t pdata_buflen, send_memory_config *send_mem_cfg);
-int init_recv_thread(int socket, recv_memory_config *recv_mem_cfg);
-int init_send_thread(int socket, send_memory_config *send_mem_cfg, void *(*send_packets)(void *arg));
-void *receive_packets(void *arg);
 
 /* packets */
-void send_packet(uint32_t pn, int32_t psize, send_memory_config *send_mem_cfg, int socket);
+void send_packet(uint32_t pn, int32_t psize, send_memory_config *send_mem_cfg, char *packet, size_t packet_size, char *final_packet, size_t final_packet_size, int socket);
 void send_join(char *name, send_memory_config *send_mem_cfg);
-// void send_accept(char player_id, send_memory_config *send_mem_cfg);
-// void send_message(char type, char source_id, char *message, send_memory_config *send_mem_cfg);
-// void send_lobby(game_lobby *game_lobby, send_memory_config *send_mem_cfg);
-// void send_game_ready(game_state *game_state, send_memory_config *send_mem_cfg);
-// void send_player_ready(char player_id, send_memory_config *send_mem_cfg);
-// void send_game_state(game_state *game_state, send_memory_config *send_mem_cfg);
-// void send_player_input(char input, send_memory_config *send_mem_cfg);
-// void send_check_status(send_memory_config *send_mem_cfg);
-// void send_game_end(game_state *game_state, send_memory_config *send_mem_cfg);
+void send_accept(char player_id, send_memory_config *send_mem_cfg);
+void send_message(char type, char source_id, char *message, send_memory_config *send_mem_cfg);
+void send_lobby(game_lobby *game_lobby, send_memory_config *send_mem_cfg);
+void send_game_ready(game_state *game_state, send_memory_config *send_mem_cfg);
+void send_player_ready(char player_id, send_memory_config *send_mem_cfg);
+void send_game_state(game_state *game_state, send_memory_config *send_mem_cfg);
+void send_player_input(char input, send_memory_config *send_mem_cfg);
+void send_check_status(send_memory_config *send_mem_cfg);
+void send_game_end(game_state *game_state, send_memory_config *send_mem_cfg);
 
 /* debug */
 void print_bytes(void *start, size_t len);
 void print_bytes_full(void *start, size_t len);
 void print_recv_memory(recv_memory_config *recv_mem_cfg);
 void print_send_memory(send_memory_config *send_mem_cfg);
+void here();
+void printint(char *tag, int x);
+void printfloat(char *tag, float x);
+void printstr(char *str);
+void printstrt(char *tag, char *str);
 
 /* helpers */
 int encode(char *data, size_t datalen, char *buf, size_t buflen);
