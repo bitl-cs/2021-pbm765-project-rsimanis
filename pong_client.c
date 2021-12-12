@@ -239,6 +239,24 @@ void send_join(char *name, client_send_memory *send_mem) {
     send_mem->packet_ready = PACKET_READY_TRUE;
 }
 
+void send_message_from_client(char type, char source_id, char *message, client_send_memory *send_mem) {
+    size_t mlen, offset;
+
+    mlen = strlen(message);
+    if (mlen > MAX_MESSAGE_SIZE - 1)
+        mlen = MAX_MESSAGE_SIZE - 1;
+
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_MESSAGE_ID;
+    offset = insert_char(type, send_mem->pdata, sizeof(send_mem->pdata), 0); 
+    offset += insert_char(source_id, send_mem->pdata, sizeof(send_mem->pdata), offset); 
+    offset += insert_str(message, mlen, send_mem->pdata, sizeof(send_mem->pdata), offset); 
+    send_mem->datalen = offset;
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
 void send_player_ready(char player_id, client_send_memory *send_mem) {
     while (send_mem->packet_ready == PACKET_READY_TRUE)
         sleep(PACKET_READY_WAIT_TIME);

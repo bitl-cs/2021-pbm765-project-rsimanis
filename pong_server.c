@@ -4,6 +4,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/wait.h>
@@ -28,31 +29,115 @@ void start_network(char *port, server_shared_memory *sh_mem) {
         printf("  Fatal ERROR: Could not open server socket - exiting...\n");
         exit(-1);
     }
+    printf("Initializing server...\n");
+    init_server(sh_mem);
     printf("  Starting accepting clients...\n");
     accept_clients(server_socket, sh_mem);
     printf(" Stopped accepting clients (Should not happen!) - server network stopped!\n");
 }
 
+void init_server(server_shared_memory *sh_mem) {
+    char i;
+
+    /* reset clients */
+    sh_mem->client_count = 0;
+    for (i = 0; i < MAX_CLIENTS; i++)
+        sh_mem->clients[i].id = CLIENT_ID_TAKEN_FALSE;
+
+    /* init lobbys */
+    init_lobby(&sh_mem->lobby_1v1, 2);
+    init_lobby(&sh_mem->lobby_2v2, 4);
+
+    /* reset game states */ 
+    for (i = 0; i < MAX_GAME_STATES; i++)
+        sh_mem->game_states[i].status = GAME_STATE_STATUS_FREE;
+}
+
+void init_lobby(lobby *lobby, int max_players) {
+    lobby->max_players = max_players;
+    reset_lobby(lobby);
+}
+
+void reset_lobby(lobby *lobby) {
+    char i;
+
+    lobby->last_update = clock();
+    lobby->player_count = 0;
+    for (i = 0; i < lobby->max_players; i++)
+        lobby->players[i] = NULL;
+}
+
 
 /* game */
+void lobbyloop(server_shared_memory *sh_mem) {
+    update_lobby(&sh_mem->lobby_1v1, sh_mem);
+    update_lobby(&sh_mem->lobby_2v2, sh_mem);
+}
+
+void update_lobby(lobby *lobby, server_shared_memory *sh_mem) {
+    char i;
+    double diff;        /* time difference in seconds */
+    game_state *gs;
+    clock_t now;
+
+    now = clock();
+    diff = (double) (now - lobby->last_update) / CLOCKS_PER_SEC;
+    if (diff >= LOBBYLOOP_UPDATE_INTERVAL) {
+        lobby->last_update = now;
+        if (lobby->player_count == lobby->max_players) {
+            /* start game */
+            gs = find_free_game_state(sh_mem);
+            if (lobby->max_players == 2)
+                init_game_1v1(gs);
+            else if (lobby->max_players == 4)
+                init_game_2v2(gs);
+
+            /* update player states */
+            for (i = 0; i < lobby->player_count; i++)
+                lobby->players[i]->state = PLAYER_STATE_LOADING;
+
+            /* reset lobby */
+            reset_lobby(lobby);
+        }
+        else {
+            for (i = 0; i < lobby->player_count; i++)
+                send_lobby(lobby->players[i]);
+        }
+    }
+}
+
 void gameloop(server_shared_memory *sh_mem) {
+    char i, j;
+    game_state *gs;
+    client *c;
+
     printf("Starting game loop! (It will run forever - use Ctrl+C)\n");
     while (1) {
-        // loop forever
+        for (i = 0; i < MAX_GAME_STATES; i++) {
+            gs = &sh_mem->game_states[i];
+            if (gs->status == GAME_STATE_STATUS_IN_PROGRESS)
+                update_game_state(gs);
+            else if (gs->status == GAME_STATE_STATUS_SUCCESS || gs->status == GAME_STATE_STATUS_ERROR) {
+                for (j = 0; j < gs->player_count; j++) {
+                    c = find_client_by_id(gs->players[j].id, sh_mem);
+                    c->state = PLAYER_STATE_STATISTICS;
+                    send_game_end(c);
+                    if (gs->status == GAME_STATE_STATUS_ERROR)
+                        send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, "Something went wrong", c);
+                }
+                gs->status = GAME_STATE_STATUS_FREE;
+            }
+        }
     }
 }
 
 
 /* client processing */
 void accept_clients(int server_socket, server_shared_memory *sh_mem) {
-    int tid = 0;
-    int client_socket = -1;
-    char i;
+    int tid, client_socket;
 
-    sh_mem->client_count = 0;
-    for (i = 0; i < MAX_CLIENTS; i++)
-        sh_mem->clients[i].id = -1;
-
+    tid = 0;
+    client_socket = -1;
     while (1) {
         client_socket = accept(server_socket, NULL, NULL);
         if (client_socket<0) {
@@ -82,7 +167,7 @@ void accept_clients(int server_socket, server_shared_memory *sh_mem) {
             }
             else {
                 /* orphaning */
-                wait(NULL);
+                wait(NULL); /* blocks parent process until any of its children has finished */
                 printf("Successfully orphaned client %d\n", new_client->id);
                 exit(0);
             }
@@ -115,7 +200,7 @@ void process_client(client *client, server_shared_memory* sh_mem) {
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
     /* process already validated incoming packets */
-    process_client_packets(client);
+    process_client_packets(client, sh_mem);
 }
 
 
@@ -128,7 +213,7 @@ client *init_client(server_shared_memory *sh_mem, int socket) {
 
     for (id = 0; id < MAX_CLIENTS; id++) {
         cl = &sh_mem->clients[id];
-        if (cl->id == -1) {
+        if (cl->id == CLIENT_ID_TAKEN_FALSE) {
             sh_mem->client_count++;
             cl->id = id;
             cl->socket = socket;
@@ -144,7 +229,7 @@ client *init_client(server_shared_memory *sh_mem, int socket) {
 }
 
 void remove_client(client *client, server_shared_memory *sh_mem) {
-    client->id = -1;
+    client->id = CLIENT_ID_TAKEN_FALSE;
     sh_mem->client_count--;
     close(client->socket);
 }
@@ -264,7 +349,7 @@ void *send_server_packets(void *arg) {
     return NULL;
 }
 
-void process_client_packets(client *client) {
+void process_client_packets(client *client, server_shared_memory *sh_mem) {
     server_recv_memory *recv_mem = &(client->recv_mem);
     char *packet_ready = &recv_mem->packet_ready;
     unsigned char pid = *((unsigned char *) recv_mem->packet_buf + PACKET_NUMBER_SIZE);
@@ -289,7 +374,7 @@ void process_client_packets(client *client) {
                     process_check_status(client);
                     break;
                 case PACKET_GAME_TYPE_ID:
-                    process_game_type(pdata, client);
+                    process_game_type(pdata, client, sh_mem);
                     break;
                 default:
                     printf("Invalid pid (%u)\n", pid);
@@ -329,7 +414,7 @@ void process_join(char *data, client *client) {
         }
     }
     else {
-            printf("Client (id=%d) send JOIN packet while being in wrong state (state=%d)\n", client->id, client->state);
+        printf("Client (id=%d) send JOIN packet while being in wrong state (state=%d)\n", client->id, client->state);
     }
 }
 
@@ -362,7 +447,12 @@ void process_message_from_client(char *data, client *client) {
 }
 
 void process_player_ready(client *client) {
-    // TODO: start game
+    if (client->state == PLAYER_STATE_LOADING) {
+        if (client->player == NULL) {
+
+        }
+        client->player->ready = PLAYER_READY_TRUE;
+    }
 }
 
 void process_player_input(char *data, client *client) {
@@ -374,21 +464,22 @@ void process_player_input(char *data, client *client) {
     down = (input >> 1) & 1;
     up = (input >> 2) & 1;
 
+    if (client->state == PLAYER_STATE_GAME && client->player != NULL && (down || up)) {
+        if (down)
+            client->player->a.y = PLAYER_ACCELERATION;
+        if (up)
+            client->player->a.y = -PLAYER_ACCELERATION;
+    }
+
     if (exit) {
         if (client->state == PLAYER_STATE_STATISTICS) {
-            // TODO: move player to main menu
+            // TODO: move player to main menu (specific packet could be more reasonable)
+            // send_accept(client->id, client);
         }
         else {
+            // maybe
             // TODO: move player to join
         }
-    }
-
-    if (down && client->state == PLAYER_STATE_GAME) {
-        // TODO: set (positive?) player acceleration
-    }
-
-    if (up && client->state == PLAYER_STATE_GAME) {
-        // TODO: set (negative?) player acceleration
     }
 }
 
@@ -396,20 +487,17 @@ void process_check_status(client *client) {
     // do nothing
 }
 
-void process_game_type(char *data, client *client) {
+void process_game_type(char *data, client *client, server_shared_memory *sh_mem) {
     char type;
 
     if (client->state == PLAYER_STATE_MENU) {
         type = *data;
-        if (type == PACKET_GAME_TYPE_TYPE_1V1) {
-            // TODO: add player to 1v1 lobby
-        }
-        else if (type == PACKET_GAME_TYPE_TYPE_2V2) {
-            // TODO: add player to 2v2 lobby
-        }
-        else {
+        if (type == PACKET_GAME_TYPE_TYPE_1V1)
+            add_client_to_lobby(client, &sh_mem->lobby_1v1);
+        else if (type == PACKET_GAME_TYPE_TYPE_2V2)
+            add_client_to_lobby(client, &sh_mem->lobby_2v2);
+        else
             printf("Client (id=%d) send invalid game type (type=%d) \n", client->id, type);
-        }
     }
     else
         printf("Client (id=%d) send GAME_TYPE packet while being in wrong state (state=%d) \n", client->id, client->state);
@@ -436,8 +524,7 @@ void send_accept(char player_id, client *client) {
 }
 
 void send_message_from_server(char type, char source_id, char *message, client *client) {
-    size_t mlen;
-    size_t offset;
+    size_t mlen, offset;
     server_send_memory *send_mem;
 
     send_mem = &client->send_mem;
@@ -503,7 +590,7 @@ void send_game_ready(client *client) {
     for (i = 0; i < gs->player_count; i++) {
         offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_char(gs->players[i].ready, send_mem->pdata, sizeof(send_mem->pdata), offset);
-        offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->players[i].team->id, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_bytes(gs->players[i].name, MAX_NAME_SIZE,send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_float_as_big_endian(gs->players[i].pos.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_float_as_big_endian(gs->players[i].pos.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
@@ -543,7 +630,7 @@ void send_game_state(client *client) {
     offset += insert_char(gs->player_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
     for (i = 0; i < gs->player_count; i++) {
         offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
-        offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->players[i].team->id, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_float_as_big_endian(gs->players[i].pos.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_float_as_big_endian(gs->players[i].pos.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_float_as_big_endian(gs->players[i].width, send_mem->pdata, sizeof(send_mem->pdata), offset);
@@ -584,7 +671,7 @@ void send_game_end(client *client) {
 
     send_mem->pid = PACKET_GAME_END_ID;
 
-    offset = insert_char(gs->end_status, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    offset = insert_char(gs->status, send_mem->pdata, sizeof(send_mem->pdata), 0);
     offset += insert_int32_t_as_big_endian(find_team_score(client), send_mem->pdata, sizeof(send_mem->pdata), offset);
     offset += insert_int32_t_as_big_endian(gs->end_time - gs->start_time, send_mem->pdata, sizeof(send_mem->pdata), offset);
 
@@ -597,7 +684,7 @@ void send_game_end(client *client) {
     offset += insert_char(gs->player_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
     for (i = 0; i < gs->player_count; i++) {
         offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
-        offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->players[i].team->id, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_int32_t_as_big_endian(gs->players[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
         offset += insert_bytes(gs->players[i].name, MAX_NAME_SIZE, send_mem->pdata, sizeof(send_mem->pdata), offset);
     }
@@ -607,6 +694,31 @@ void send_game_end(client *client) {
 }
 
 /* helpers */
+client *find_client_by_id(char id, server_shared_memory *sh_mem) {
+    char i;
+    client *c;
+
+    for (i = 0; i < MAX_CLIENTS; i++) {
+        c = &sh_mem->clients[i];
+        if (c->id == id)
+            return c;
+    }
+    return NULL;
+}
+
+void add_client_to_lobby(client *client, lobby *lobby) {
+    int i;
+
+    while (lobby->max_players == lobby->player_count)
+        sleep(1/50.0);
+
+    for (i = 0; i < lobby->max_players; i++) {
+        if (lobby->players[i] == NULL)
+            lobby->players[i] = client;
+    }
+    client->state = PLAYER_STATE_LOBBY;
+}
+
 int find_team_score(client *client) {
     char i, team_id;
     game_state *gs;
@@ -618,7 +730,7 @@ int find_team_score(client *client) {
     team_id = -1;
     for (i = 0; i < gs->player_count; i++) {
         if (gs->players[i].id == client->id)
-            team_id = gs->players[i].team_id;
+            team_id = gs->players[i].team->id;
     }
     if (team_id == -1)
         return -1;

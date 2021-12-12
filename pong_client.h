@@ -5,10 +5,6 @@
 #include "pong_server.h"
 
 
-// #define CLIENT_RECV_MEMORY_SIZE             (PACKET_READY_SIZE + PACKET_FROM_SERVER_MAX_SIZE)
-// #define CLIENT_SEND_MEMORY_SIZE             (PACKET_READY_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE + PACKET_FROM_CLIENT_MAX_DATA_SIZE)
-// #define CLIENT_SHARED_MEMORY_SIZE           (CLIENT_RECV_MEMORY_SIZE + CLIENT_SEND_MEMORY_SIZE)
-
 typedef struct _client_recv_memory {
     char packet_ready;
     char packet_buf[PACKET_FROM_SERVER_MAX_SIZE];
