@@ -14,24 +14,11 @@
 
 
 /* init */
-void get_shared_memory(server_shared_memory_config* sh_mem_cfg) {
-    char *sh_mem_ptr;
-    int id;
-
-    sh_mem_ptr = (char *) mmap(NULL, SERVER_SHARED_MEMORY_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    sh_mem_cfg->shared_memory = sh_mem_ptr;
-    sh_mem_cfg->client_count = (unsigned char *) sh_mem_ptr;
-    sh_mem_ptr += 1;
-    sh_mem_cfg->shared_client_data = sh_mem_ptr;
-    sh_mem_ptr += SERVER_SHARED_CLIENT_DATA_SIZE * MAX_CLIENTS;
-    sh_mem_cfg->shared_gamestate_data = sh_mem_ptr;
-
-    /* set all client slots as not-taken */
-    for (id = 0; id < MAX_CLIENTS; id++)
-        *(get_client_data_ptr(id, sh_mem_cfg)) = 0; /* first byte represents if the slot is taken */
+server_shared_memory *get_server_shared_memory() {
+    return mmap(NULL, sizeof(server_shared_memory), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 }
 
-void start_network(char *port, server_shared_memory_config *sh_mem_cfg) {
+void start_network(char *port, server_shared_memory *sh_mem) {
     int server_socket;
 
     server_socket = -1;
@@ -42,13 +29,13 @@ void start_network(char *port, server_shared_memory_config *sh_mem_cfg) {
         exit(-1);
     }
     printf("  Starting accepting clients...\n");
-    accept_clients(server_socket, sh_mem_cfg);
+    accept_clients(server_socket, sh_mem);
     printf(" Stopped accepting clients (Should not happen!) - server network stopped!\n");
 }
 
 
 /* game */
-void gameloop(server_shared_memory_config *sh_mem_cfg) {
+void gameloop(server_shared_memory *sh_mem) {
     printf("Starting game loop! (It will run forever - use Ctrl+C)\n");
     while (1) {
         // loop forever
@@ -57,45 +44,46 @@ void gameloop(server_shared_memory_config *sh_mem_cfg) {
 
 
 /* client processing */
-void accept_clients(int server_socket, server_shared_memory_config *sh_mem_cfg) {
-    int new_client_id = 0;
+void accept_clients(int server_socket, server_shared_memory *sh_mem) {
     int tid = 0;
     int client_socket = -1;
-    *(sh_mem_cfg->client_count) = 0;
+    char i;
 
-    while(1){
+    sh_mem->client_count = 0;
+    for (i = 0; i < MAX_CLIENTS; i++)
+        sh_mem->clients[i].id = -1;
+
+    while (1) {
         client_socket = accept(server_socket, NULL, NULL);
-        if(client_socket<0){
+        if (client_socket<0) {
             printf("  Soft ERROR accepting the client connection! ERRNO=%d Continuing...\n", errno);
             continue;
             /* WE CAN accept other clients if this fails to connect so continue! */
         }
 
         /* New client */
-        new_client_id = find_free_client_id(sh_mem_cfg);
-        if (new_client_id == -1) {
+        client *new_client = init_client(sh_mem, client_socket);
+        if (new_client == NULL) {
             printf("Limit for maximum clients is reached\n");
             close(client_socket);
             continue;
         }
-        *(sh_mem_cfg->client_count) += 1;
-        *get_client_data_ptr(new_client_id, sh_mem_cfg) = 1;
 
         /* We have a client connection - doublefork&orphan to process it, main thread closes socket and listens for a new one */
         tid = fork();
-        if(tid == 0){
+        if (tid == 0){
             /* child - will double fork & orphan */
             close(server_socket);
             tid = fork();
-            if(tid == 0){
+            if (tid == 0){
                 /* NOTE: ideally You would check if clients disconnect and reduce client_count to allow new connections, this is not yet implemented */
-                process_client(new_client_id, client_socket, sh_mem_cfg);
+                process_client(new_client, sh_mem);
                 exit(0);
             }
             else {
                 /* orphaning */
                 wait(NULL);
-                printf("Successfully orphaned client %d\n", new_client_id);
+                printf("Successfully orphaned client %d\n", new_client->id);
                 exit(0);
             }
         }
@@ -106,95 +94,78 @@ void accept_clients(int server_socket, server_shared_memory_config *sh_mem_cfg) 
     }
 }
 
-void process_client(int id, int socket, server_shared_memory_config* sh_mem_cfg) {
-    printf("CLIENT connected (client_count=%d, client_id=%d, socket=%d)\n", *(sh_mem_cfg->client_count), id, socket);
-    client_data cd;
-    get_client_data(id, socket, sh_mem_cfg, &cd);
+void process_client(client *client, server_shared_memory* sh_mem) {
+    printf("CLIENT connected (client_count=%d, client_id=%d, socket=%d)\n", sh_mem->client_count, client->id, client->socket);
 
-    /* set packet_ready for both buffers to false */
-    *(cd.recv_mem_cfg.packet_ready) = PACKET_READY_FALSE;
-    *(cd.send_mem_cfg.packet_ready) = PACKET_READY_FALSE;
+    /* initialize thread arguments */
+    server_recv_send_thread_args srsta;
+    srsta.client = client;
+    srsta.sh_mem = sh_mem;
 
     /* initialize packet receiving thread */
     pthread_t receiving_thread_id;
-    server_recv_thread_args srta;
-    srta.cd = &cd;
-    srta.sh_mem_cfg = sh_mem_cfg;
-    if (pthread_create(&receiving_thread_id, NULL, receive_client_packets, (void *) &srta) != 0)
+    if (pthread_create(&receiving_thread_id, NULL, receive_client_packets, (void *) &srsta) != 0)
         exit(-1);
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
     /* initialize packet sending thread */
     pthread_t sending_thread_id;
-    send_thread_args sta;
-    sta.socket = socket;
-    sta.send_mem_cfg = &cd.send_mem_cfg;
-    if (pthread_create(&sending_thread_id, NULL, send_server_packets, (void *) &sta) != 0)
+    if (pthread_create(&sending_thread_id, NULL, send_server_packets, (void *) &srsta) != 0)
         exit(-1);
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
     /* process already validated incoming packets */
-    process_client_packets(&cd);
+    process_client_packets(client);
 }
 
 
-int find_free_client_id(server_shared_memory_config *sh_mem_cfg) {
-    int id;
+client *init_client(server_shared_memory *sh_mem, int socket) {
+    char id;
+    client *cl;
+
+    if (sh_mem->client_count == MAX_CLIENTS)
+        return NULL;
 
     for (id = 0; id < MAX_CLIENTS; id++) {
-        if (*(get_client_data_ptr(id, sh_mem_cfg)) == 0) /* first byte represents if the slot is taken */ 
-            return id;
+        cl = &sh_mem->clients[id];
+        if (cl->id == -1) {
+            sh_mem->client_count++;
+            cl->id = id;
+            cl->socket = socket;
+            cl->state = PLAYER_STATE_JOIN;
+            cl->lobby = NULL;
+            cl->game_state = NULL;
+            cl->recv_mem.packet_ready = PACKET_READY_FALSE;
+            cl->send_mem.packet_ready = PACKET_READY_FALSE;
+            return cl;
+        }
     }
-    return -1;
+    return NULL;
 }
 
-void remove_client(client_data *cd, server_shared_memory_config *sh_mem_cfg) {
-    *(cd->taken) = 0;
-    (*(sh_mem_cfg->client_count))--;
-    close(cd->socket);
-}
-
-char *get_client_data_ptr(int id, server_shared_memory_config *sh_mem_cfg) {
-    return sh_mem_cfg->shared_client_data + SERVER_SHARED_CLIENT_DATA_SIZE * id;
-}
-
-void get_client_data(int id, int socket, server_shared_memory_config *sh_mem_cfg, client_data *cd) {
-    char *cd_ptr;
-
-    cd->id = id;
-    cd->socket = socket;
-    cd_ptr = get_client_data_ptr(id, sh_mem_cfg);
-    cd->client_data = cd_ptr;
-    cd->taken = (unsigned char *) cd_ptr;
-    cd_ptr += CLIENT_TAKEN_SIZE;
-    cd->name = cd_ptr;
-    cd_ptr += MAX_NAME_SIZE;
-    cd->input = cd_ptr; 
-    cd_ptr += INPUT_SIZE; 
-    cd->state = cd_ptr;
-    cd_ptr += CLIENT_STATE_SIZE;
-    get_recv_memory_config(cd_ptr, SERVER_RECV_MEMORY_SIZE, &(cd->recv_mem_cfg));
-    cd_ptr += SERVER_RECV_MEMORY_SIZE;
-    get_send_memory_config(cd_ptr, SERVER_SEND_MEMORY_SIZE, &(cd->send_mem_cfg));
+void remove_client(client *client, server_shared_memory *sh_mem) {
+    client->id = -1;
+    sh_mem->client_count--;
+    close(client->socket);
 }
 
 /* packet processing */
 /* validate incoming packets */
 void *receive_client_packets(void *arg) {
     /* process thread arguments */
-    server_recv_thread_args *srta = (server_recv_thread_args *) arg;
-    client_data *cd = srta->cd;
-    server_shared_memory_config *sh_mem_cfg = srta->sh_mem_cfg;
-    recv_memory_config *recv_mem_cfg = &(cd->recv_mem_cfg);
+    server_recv_send_thread_args *srsta = (server_recv_send_thread_args *) arg;
+    client *client = srsta->client;
+    server_shared_memory *sh_mem = srsta->sh_mem;
 
     /* initialize packet number counter for received packets */
     uint32_t recv_pn = 0;
 
     /* variables for code clarity */
-    char *packet_ready = recv_mem_cfg->packet_ready;
-    char *packet = recv_mem_cfg->packet;
-    uint32_t *pn = recv_mem_cfg->pn;
-    int32_t *psize = recv_mem_cfg->psize;
+    server_recv_memory *recv_mem = &client->recv_mem;
+    char *packet_ready = &recv_mem->packet_ready;
+    char *packet_buf = recv_mem->packet_buf;
+    uint32_t *pn = (uint32_t *) packet_buf;
+    int32_t *psize = (int32_t *) (packet_buf + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
 
     /* variables for underlying algorithm */
     char c = 0, prevc = 0;
@@ -203,14 +174,14 @@ void *receive_client_packets(void *arg) {
     int len;
 
     while (1) {
-        if ((len = recv(cd->socket, &c, 1, 0)) > 0) {
+        if ((len = recv(client->socket, &c, 1, 0)) > 0) {
             /* wait until another packet is processed */
             while (*packet_ready) 
                 sleep(PACKET_READY_WAIT_TIME);
 
             if (c == '-') {
                 if (prevc == '?')
-                    packet[i++] = '-';
+                    packet_buf[i++] = '-';
                 else {
                     sep_count++;
                     if (sep_count == PACKET_SEPARATOR_SIZE) {
@@ -222,7 +193,7 @@ void *receive_client_packets(void *arg) {
                         // print_bytes(packet, i);
 
                         /* verify packet */
-                        *packet_ready = verify_packet(recv_pn, recv_mem_cfg, i - PACKET_HEADER_SIZE - PACKET_FOOTER_SIZE, packet[i - PACKET_CHECKSUM_SIZE]);
+                        *packet_ready = verify_packet(recv_pn, packet_buf, i);
 
                         recv_pn++;
                         c = prevc = i = sep_count = 0;
@@ -231,26 +202,26 @@ void *receive_client_packets(void *arg) {
                 }
             }
             else if (c == '*')
-                packet[i++] = (prevc == '?') ? '?' : '*';
+                packet_buf[i++] = (prevc == '?') ? '?' : '*';
             else {
                 if (prevc == '?' || (sep_count > 0 && sep_count != PACKET_SEPARATOR_SIZE)) {
                     c = prevc = i = sep_count = 0;
                     continue;
                 }
                 if (c != '?')
-                    packet[i++] = c;
+                    packet_buf[i++] = c;
             }
             prevc = c;
         }
         else if (len == 0) {
-            printf("Client disconnected (client_id=%d, socket=%d)\n", cd->id, cd->socket);
-            remove_client(cd, sh_mem_cfg);
+            printf("Client disconnected (client_id=%d, socket=%d)\n", client->id, client->socket);
+            remove_client(client, sh_mem);
             exit(0);
         }
         else {
             printf("Recv() error (errno=%d)\n", errno);
-            printf("Removing client... (client_id=%d, socket=%d)\n", cd->id, cd->socket);
-            remove_client(cd, sh_mem_cfg);
+            printf("Removing client... (client_id=%d, socket=%d)\n", client->id, client->socket);
+            remove_client(client, sh_mem);
             exit(-1);
         }
     }
@@ -259,31 +230,32 @@ void *receive_client_packets(void *arg) {
 
 void *send_server_packets(void *arg) {
     /* process thread arguments */
-    send_thread_args *sta = (send_thread_args *) arg;
-    int socket = sta->socket;
-    send_memory_config *send_mem_cfg = sta->send_mem_cfg;
+    server_recv_send_thread_args *srsta = (server_recv_send_thread_args *) arg;
+    client *client = srsta->client;
+    server_shared_memory *sh_mem = srsta->sh_mem;
 
     /* initialize packet number counter for sent packets */
     uint32_t send_pn = 0;
 
     /* allocate buffers for storing packets before they are sent (buffering) */
-    char packet[PACKET_FROM_SERVER_MAX_SIZE];
-    char final_packet[2 * PACKET_FROM_SERVER_MAX_SIZE]; /* assume that all characters in array "packet" could get encoded */ 
+    server_send_memory *send_mem = &client->send_mem;
+    char buf[PACKET_HEADER_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE];
+    char final_buf[sizeof(buf) * 2 + PACKET_SEPARATOR_SIZE];
 
     while(1) {
-        if (*(send_mem_cfg->packet_ready) == PACKET_READY_TRUE) {
-            if (*(send_mem_cfg->pid) == PACKET_ACCEPT_ID)
-                send_packet(send_pn++, PACKET_ACCEPT_DATA_SIZE, send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
-            else if (*(send_mem_cfg->pid) == PACKET_MESSAGE_ID)
-                send_packet(send_pn++, PACKET_MESSAGE_DATA_SIZE, send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
-            else if (*(send_mem_cfg->pid) == PACKET_LOBBY_ID ||
-                        *(send_mem_cfg->pid) == PACKET_GAME_READY_ID ||
-                        *(send_mem_cfg->pid) == PACKET_GAME_STATE_ID ||
-                        *(send_mem_cfg->pid) == PACKET_GAME_END_ID)
-                send_packet(send_pn++, *(send_mem_cfg->datalen), send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
+        if (send_mem->packet_ready == PACKET_READY_TRUE) {
+            if (send_mem->pid == PACKET_ACCEPT_ID)
+                send_server_packet(send_pn++, PACKET_ACCEPT_DATA_SIZE, send_mem, buf, final_buf, client->socket);
+            else if (send_mem->pid == PACKET_MESSAGE_ID)
+                send_server_packet(send_pn++, PACKET_MESSAGE_DATA_SIZE, send_mem, buf, final_buf, client->socket);
+            else if (send_mem->pid == PACKET_LOBBY_ID ||
+                        send_mem->pid == PACKET_GAME_READY_ID ||
+                        send_mem->pid == PACKET_GAME_STATE_ID ||
+                        send_mem->pid == PACKET_GAME_END_ID)
+                send_server_packet(send_pn++, send_mem->datalen, send_mem, buf, final_buf, client->socket);
             else
-                printf("Invalid pid (%u)\n", (unsigned) *(send_mem_cfg->pid));
-            *(send_mem_cfg->packet_ready) = PACKET_READY_FALSE;
+                printf("Invalid pid (%u)\n", (unsigned) send_mem->pid);
+            send_mem->packet_ready = PACKET_READY_FALSE;
         }
         else
             sleep(PACKET_READY_WAIT_TIME);
@@ -292,97 +264,410 @@ void *send_server_packets(void *arg) {
     return NULL;
 }
 
-void process_client_packets(client_data *cd) {
-    recv_memory_config *recv_mem_cfg = &(cd->recv_mem_cfg);
+void process_client_packets(client *client) {
+    server_recv_memory *recv_mem = &(client->recv_mem);
+    char *packet_ready = &recv_mem->packet_ready;
+    unsigned char pid = *((unsigned char *) recv_mem->packet_buf + PACKET_NUMBER_SIZE);
+    char *pdata = recv_mem->packet_buf + PACKET_HEADER_SIZE;
 
     while (1) {
-        if (*(recv_mem_cfg->packet_ready) == PACKET_READY_TRUE) {
-            switch (*(recv_mem_cfg->pid)) {
+        if (*packet_ready == PACKET_READY_TRUE) {
+            switch (pid) {
                 case PACKET_JOIN_ID:
-                    process_join(recv_mem_cfg->pdata, cd);
+                    process_join(pdata, client);
                     break;
                 case PACKET_MESSAGE_ID:
-                    process_message_from_client(recv_mem_cfg->pdata, cd);
+                    process_message_from_client(pdata, client);
                     break;
                 case PACKET_PLAYER_READY_ID:
-                    process_player_ready(cd);
+                    process_player_ready(client);
                     break;
                 case PACKET_PLAYER_INPUT_ID:
-                    process_player_input(recv_mem_cfg->pdata, cd);
+                    process_player_input(pdata, client);
                     break;
                 case PACKET_CHECK_STATUS_ID:
-                    process_check_status(cd);
+                    process_check_status(client);
+                    break;
+                case PACKET_GAME_TYPE_ID:
+                    process_game_type(pdata, client);
                     break;
                 default:
-                    printf("Invalid pid (%u)\n", (unsigned) *(recv_mem_cfg->pid));
+                    printf("Invalid pid (%u)\n", pid);
             }
-            *(recv_mem_cfg->packet_ready) = PACKET_READY_FALSE;
+            *packet_ready = PACKET_READY_FALSE;
         }
         else
             sleep(PACKET_READY_WAIT_TIME);
     }
 }
 
-void process_join(char *data, client_data *cd) {
-    char *name = data;
+void process_join(char *data, client *client) {
+    char *name;
+    size_t namelen;
+    // printf("RECEIVED JOIN, NAME = %s\n", name);
 
-    printf("RECEIVED JOIN, NAME = %s\n", name);
-    send_accept(1, &cd->send_mem_cfg);
-    /* if state == 0 */
-        /* add username to client_data */ 
-        /* change state */
-        /* send accept packet as response */
+    if (client->state == PLAYER_STATE_JOIN) {
+        name = data;
+        namelen = strlen(name);
+        if (namelen > MAX_NAME_SIZE - 1) {
+            // name too long
+            send_accept(PACKET_ACCEPT_STATUS_ERROR, client);
+            send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, "Name must not be more than 19 characters long!", client);
+            printf("Client (id=%d) tried to join with too long name\n", client->id);
+        }
+        else if (!is_alphanum(name, namelen)) {
+            // must contain only alphanumerical characters
+            send_accept(PACKET_ACCEPT_STATUS_ERROR, client);
+            send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, "Name must contain only alphanumerical characters!", client);
+            printf("Client (id=%d) tried to join with name that does not contain only alphanumerical characters\n", client->id);
+        }
+        else {
+            // everything ok
+            insert_str(name, namelen, client->name, MAX_NAME_SIZE, 0);
+            client->state = PLAYER_STATE_MENU;
+            send_accept(client->id, client);
+        }
+    }
+    else {
+            printf("Client (id=%d) send JOIN packet while being in wrong state (state=%d)\n", client->id, client->state);
+    }
 }
 
-void process_message_from_client(char *data, client_data *cd) {
-    char *data_ptr = data;
-    char type = *data_ptr;
-    data_ptr += 1;
-    char source_id = *data_ptr;
-    data_ptr += 1;
-    char *message = data_ptr;
+void process_message_from_client(char *data, client *client) {
+    char target_id, source_id, *message, i;
+    size_t mlen;
+    // printf("Received MESSAGE from client (id=%d, socket=%d), type=%d, source_id=%d, message=%s\n", cd->id, cd->socket, type, source_id, message);
 
-    printf("Received MESSAGE from client (id=%d, socket=%d), type=%d, source_id=%d, message=%s\n", cd->id, cd->socket, type, source_id, message);
-    send_message(0, -1, "to all", &cd->send_mem_cfg);
+    if (client->state == PLAYER_STATE_LOBBY) {
+        target_id = *data;
+        source_id = *(data + 1);
+        message = data + 2;
+        mlen = strlen(message);
+
+        if (mlen > MAX_MESSAGE_SIZE - 1)
+            printf("Client (id=%d) tried to send message that is too long\n", client->id);
+        else if (target_id == PACKET_MESSAGE_TARGET_ALL) {
+            // send message to all players in the same lobby
+            for (i = 0; i < client->lobby->player_count; i++) {
+                send_message_from_server(PACKET_MESSAGE_TYPE_CHAT, source_id, message, client->lobby->players[i]);
+            }
+        }
+        else {
+            send_message_from_server(PACKET_MESSAGE_TYPE_CHAT, source_id, message, client);
+        }
+    }
+    else {
+        printf("Client (id=%d) send MESSAGE packet while being in wrong state (state=%d) \n", client->id, client->state);
+    }
 }
 
-void process_player_ready(client_data *cd) {
-
+void process_player_ready(client *client) {
+    // TODO: start game
 }
 
-void process_player_input(char *data, client_data *cd) {
+void process_player_input(char *data, client *client) {
+    char input;
+    char exit, down, up;
 
+    input = *data;
+    exit = input & 1;
+    down = (input >> 1) & 1;
+    up = (input >> 2) & 1;
+
+    if (exit) {
+        if (client->state == PLAYER_STATE_STATISTICS) {
+            // TODO: move player to main menu
+        }
+        else {
+            // TODO: move player to join
+        }
+    }
+
+    if (down && client->state == PLAYER_STATE_GAME) {
+        // TODO: set (positive?) player acceleration
+    }
+
+    if (up && client->state == PLAYER_STATE_GAME) {
+        // TODO: set (negative?) player acceleration
+    }
 }
 
-void process_check_status(client_data *cd) {
-
+void process_check_status(client *client) {
+    // do nothing
 }
+
+void process_game_type(char *data, client *client) {
+    char type;
+
+    if (client->state == PLAYER_STATE_MENU) {
+        type = *data;
+        if (type == PACKET_GAME_TYPE_TYPE_1V1) {
+            // TODO: add player to 1v1 lobby
+        }
+        else if (type == PACKET_GAME_TYPE_TYPE_2V2) {
+            // TODO: add player to 2v2 lobby
+        }
+        else {
+            printf("Client (id=%d) send invalid game type (type=%d) \n", client->id, type);
+        }
+    }
+    else
+        printf("Client (id=%d) send GAME_TYPE packet while being in wrong state (state=%d) \n", client->id, client->state);
+}
+
+
+void send_server_packet(uint32_t pn, int32_t psize, server_send_memory *send_mem, char *buf, char *final_buf, int socket) {
+    send_packet(pn, send_mem->pid, psize, send_mem->pdata, send_mem->datalen, 
+                    buf, PACKET_HEADER_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE, 
+                    final_buf, (PACKET_HEADER_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE) * 2 + PACKET_SEPARATOR_SIZE, 
+                    socket);
+}
+
+void send_accept(char player_id, client *client) {
+    server_send_memory *send_mem;
+
+    send_mem = &client->send_mem;
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_ACCEPT_ID;
+    send_mem->datalen = insert_char(player_id, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_message_from_server(char type, char source_id, char *message, client *client) {
+    size_t mlen;
+    size_t offset;
+    server_send_memory *send_mem;
+
+    send_mem = &client->send_mem;
+    mlen = strlen(message);
+    if (mlen > MAX_MESSAGE_SIZE - 1)
+        mlen = MAX_MESSAGE_SIZE - 1;
+
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_MESSAGE_ID;
+    offset = insert_char(type, send_mem->pdata, sizeof(send_mem->pdata), 0); 
+    offset += insert_char(source_id, send_mem->pdata, sizeof(send_mem->pdata), offset); 
+    offset += insert_str(message, mlen, send_mem->pdata, sizeof(send_mem->pdata), offset); 
+    send_mem->datalen = offset;
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_lobby(client *client) {
+    char i;
+    size_t offset;
+    server_send_memory *send_mem;
+
+    send_mem = &client->send_mem;
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_LOBBY_ID;
+    offset = insert_char(client->lobby->player_count, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    for (i = 0; i < client->lobby->player_count; i++) {
+        offset += insert_char(client->lobby->players[i]->id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_bytes(client->lobby->players[i]->name, MAX_NAME_SIZE, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }    
+    send_mem->datalen = offset;
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_game_ready(client *client) {
+    char i;
+    size_t offset;
+    game_state *gs;
+    server_send_memory *send_mem;
+
+    gs = client->game_state;
+    send_mem = &client->send_mem;
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_GAME_READY_ID;
+    offset = insert_int32_t_as_big_endian(gs->window_width, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    offset += insert_int32_t_as_big_endian(gs->window_height, send_mem->pdata, sizeof(send_mem->pdata), offset);
+
+    offset += insert_char(gs->team_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->team_count; i++) {
+        offset += insert_char(gs->teams[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal1.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal1.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal2.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal2.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    offset += insert_char(gs->player_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->player_count; i++) {
+        offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->players[i].ready, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_bytes(gs->players[i].name, MAX_NAME_SIZE,send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].pos.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].pos.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].width, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].height, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    send_mem->datalen = offset;
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_game_state(client *client) {
+    char i;
+    size_t offset;
+    game_state *gs;
+    server_send_memory *send_mem;
+
+    gs = client->game_state;
+    send_mem = &client->send_mem;
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_GAME_STATE_ID;
+    offset = insert_int32_t_as_big_endian(gs->window_width, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    offset += insert_int32_t_as_big_endian(gs->window_height, send_mem->pdata, sizeof(send_mem->pdata), offset);
+
+    offset += insert_char(gs->team_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->team_count; i++) {
+        offset += insert_char(gs->teams[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_int32_t_as_big_endian(gs->teams[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal1.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal1.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal2.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->teams[i].goal2.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    offset += insert_char(gs->player_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->player_count; i++) {
+        offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].pos.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].pos.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].width, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->players[i].height, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    offset += insert_char(gs->ball_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->ball_count; i++) {
+        offset += insert_float_as_big_endian(gs->balls[i].pos.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->balls[i].pos.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->balls[i].radius, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->balls[i].type, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    offset += insert_char(gs->power_up_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->power_up_count; i++) {
+        offset += insert_char(gs->power_ups[i].type, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->power_ups[i].pos.x, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->power_ups[i].pos.y, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->power_ups[i].width, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_float_as_big_endian(gs->power_ups[i].height, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    send_mem->datalen = offset;
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_game_end(client *client) {
+    char i;
+    size_t offset;
+    game_state *gs;
+    server_send_memory *send_mem;
+
+    gs = client->game_state;
+    send_mem = &client->send_mem;
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_GAME_END_ID;
+
+    offset = insert_char(gs->end_status, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    offset += insert_int32_t_as_big_endian(find_team_score(client), send_mem->pdata, sizeof(send_mem->pdata), offset);
+    offset += insert_int32_t_as_big_endian(gs->end_time - gs->start_time, send_mem->pdata, sizeof(send_mem->pdata), offset);
+
+    offset += insert_char(gs->team_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->team_count; i++) {
+        offset += insert_char(gs->teams[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_int32_t_as_big_endian(gs->teams[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    offset += insert_char(gs->player_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    for (i = 0; i < gs->player_count; i++) {
+        offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_int32_t_as_big_endian(gs->players[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_bytes(gs->players[i].name, MAX_NAME_SIZE, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    }
+
+    send_mem->datalen = offset;
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+/* helpers */
+int find_team_score(client *client) {
+    char i, team_id;
+    game_state *gs;
+
+    gs = client->game_state;
+    if (gs == NULL)
+        return -1;
+
+    team_id = -1;
+    for (i = 0; i < gs->player_count; i++) {
+        if (gs->players[i].id == client->id)
+            team_id = gs->players[i].team_id;
+    }
+    if (team_id == -1)
+        return -1;
+
+    for (i = 0; i < gs->team_count; i++) {
+        if (gs->teams[i].id == team_id)
+            return gs->teams[i].score;
+    }
+    return -1;
+}
+
+int is_alphanum(char *data, size_t datalen) {
+    size_t i;
+
+    for (i = 0; i < datalen; i++) {
+        if (!((data[i] >= '0' && data[i] <= '9') || (data[i] >= 'a' && data[i] <= 'z') || (data[i] >= 'A' && data[i] <= 'Z')))
+            return 0;
+    }
+    return 1;
+}
+
 
 /* debug */
-void print_client_data(client_data *cd) {
-    printf("TAKEN: %c\n", *(cd->taken));
-    printf("NAME %s\n", cd->name);
-    printf("INPUT: %c\n", *(cd->input));
-    printf("STATE: %c\n", *(cd->state));
-    print_recv_memory(&(cd->recv_mem_cfg));
-    print_send_memory(&(cd->send_mem_cfg));
+void print_client_data(client *client) {
+    printf("ID: %d\n", client->id);
+    printf("SOCKET: %d\n", client->socket);
+    printf("NAME %s\n", client->name);
+    printf("STATE: %d\n", client->state);
+    // TODO: print lobby
+    // TODO: print game_state
+    // print_recv_memory(&(cd->recv_mem_cfg));
+    // print_send_memory(&(cd->send_mem_cfg));
 }
 
-void print_shared_memory(server_shared_memory_config* sh_mem_cfg) {
-    int id;
-    client_data cd;
+void print_shared_memory(server_shared_memory* sh_mem) {
+    // char id;
+    // client_data cd;
 
-    /* print client count */
-    printf("Client count: ");
-    print_bytes(sh_mem_cfg->client_count, 1);
-    putchar('\n');
+    // /* print client count */
+    // printf("Client count: ");
+    // print_bytes(sh_mem->client_count, 1);
+    // putchar('\n');
 
-    /* print client datas */
-    for (id = 0; id < MAX_CLIENTS; id++) {
-        print_client_data(&cd);
-        putchar('\n');
-    }
-    putchar('\n');
+    // /* print client datas */
+    // for (id = 0; id < MAX_CLIENTS; id++) {
+    //     print_client_data(&cd);
+    //     putchar('\n');
+    // }
+    // putchar('\n');
 
     /* TODO: print game states */
 }

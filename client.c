@@ -20,33 +20,31 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    /* allocate shared memory for client */
-    client_shared_memory_config sh_mem_cfg;
-    get_client_shared_memory(&sh_mem_cfg);
+    /* initialize shared memory for client */
+    client_shared_memory *sh_mem = get_client_shared_memory();
+    sh_mem->recv_mem.packet_ready = PACKET_READY_FALSE;
+    sh_mem->send_mem.packet_ready = PACKET_READY_FALSE;
 
     /* initialize packet receiving thread */
-    pthread_t receiving_thread_id;
     client_recv_thread_args crta;
-    crta.recv_mem_cfg = &sh_mem_cfg.recv_mem_cfg;
+    crta.recv_mem = &sh_mem->recv_mem;
     crta.socket = client_socket;
+    pthread_t receiving_thread_id;
     if (pthread_create(&receiving_thread_id, NULL, receive_server_packets, (void *) &crta) != 0)
         return -1;
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
     /* initialize packet sending thread */
+    client_send_thread_args csta;
+    csta.send_mem = &sh_mem->send_mem;
+    csta.socket = client_socket;
     pthread_t sending_thread_id;
-    send_thread_args sta;
-    sta.socket = client_socket;
-    sta.send_mem_cfg = &sh_mem_cfg.send_mem_cfg;
-    if (pthread_create(&sending_thread_id, NULL, send_client_packets, (void *) &sta) != 0)
+    if (pthread_create(&sending_thread_id, NULL, send_client_packets, (void *) &csta) != 0)
         return -1;
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
-    send_join("Raivis", &(sh_mem_cfg.send_mem_cfg));
-
     /* process already validated incoming packets */
-    process_server_packets(&sh_mem_cfg.recv_mem_cfg, &sh_mem_cfg.send_mem_cfg);
-
+    process_server_packets(sh_mem);
 
     return 0;
 } 

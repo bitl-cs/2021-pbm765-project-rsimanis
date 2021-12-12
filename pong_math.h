@@ -1,9 +1,14 @@
-#ifndef _MATH_H
-#define _MATH_H
+#ifndef _PONG_MATH_H
+#define _PONG_MATH_H
 
-typedef struct _vec2d_i {
+typedef struct _vec2i {
     int x;
     int y;
-} vec2d_i;
+} vec2i;
+
+typedef struct _vec2f {
+    float x;
+    float y;
+} vec2f;
 
 #endif

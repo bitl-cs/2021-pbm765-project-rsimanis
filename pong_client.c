@@ -14,17 +14,8 @@
 
 /* init */
 /* allocate shared memory for client */
-void get_client_shared_memory(client_shared_memory_config *sh_mem_cfg) {
-    char *sh_mem_ptr;
-
-    sh_mem_ptr = (char *) mmap(NULL, CLIENT_SHARED_MEMORY_SIZE, PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
-    sh_mem_cfg->shared_memory = sh_mem_ptr;
-    get_recv_memory_config(sh_mem_ptr, CLIENT_RECV_MEMORY_SIZE, &(sh_mem_cfg->recv_mem_cfg));
-    sh_mem_ptr += CLIENT_RECV_MEMORY_SIZE;
-    get_send_memory_config(sh_mem_ptr, CLIENT_SEND_MEMORY_SIZE, &(sh_mem_cfg->send_mem_cfg));
-
-    *(sh_mem_cfg->recv_mem_cfg.packet_ready) = PACKET_READY_FALSE;
-    *(sh_mem_cfg->send_mem_cfg.packet_ready) = PACKET_READY_FALSE;
+client_shared_memory *get_client_shared_memory() {
+    return mmap(NULL, sizeof(client_shared_memory), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 }
 
 
@@ -33,17 +24,17 @@ void get_client_shared_memory(client_shared_memory_config *sh_mem_cfg) {
 void *receive_server_packets(void *arg) {
     /* process thread arguments */
     client_recv_thread_args *crta = (client_recv_thread_args *) arg;
-    recv_memory_config *recv_mem_cfg = crta->recv_mem_cfg;
+    client_recv_memory *recv_mem = crta->recv_mem;
     int socket = crta->socket;
 
     /* initialize packet number counter for received packets */
     uint32_t recv_pn = 0;
 
     /* variables for code clarity */
-    char *packet_ready = recv_mem_cfg->packet_ready;
-    char *packet = recv_mem_cfg->packet;
-    uint32_t *pn = recv_mem_cfg->pn;
-    int32_t *psize = recv_mem_cfg->psize;
+    char *packet_ready = &recv_mem->packet_ready;
+    char *packet_buf = recv_mem->packet_buf;
+    uint32_t *pn = (uint32_t *) packet_buf;
+    int32_t *psize = (int32_t *) (packet_buf + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
 
     /* variables for underlying algorithm */
     char c = 0, prevc = 0;
@@ -59,7 +50,7 @@ void *receive_server_packets(void *arg) {
 
             if (c == '-') {
                 if (prevc == '?')
-                    packet[i++] = '-';
+                    packet_buf[i++] = '-';
                 else {
                     sep_count++;
                     if (sep_count == PACKET_SEPARATOR_SIZE) {
@@ -71,7 +62,7 @@ void *receive_server_packets(void *arg) {
                         // print_bytes(packet, i);
 
                         /* verify packet */
-                        *packet_ready = verify_packet(recv_pn, recv_mem_cfg, i - PACKET_HEADER_SIZE - PACKET_FOOTER_SIZE, packet[i - PACKET_CHECKSUM_SIZE]);
+                        *packet_ready = verify_packet(recv_pn, packet_buf, i);
 
                         recv_pn++;
                         c = prevc = i = sep_count = 0;
@@ -80,14 +71,14 @@ void *receive_server_packets(void *arg) {
                 }
             }
             else if (c == '*')
-                packet[i++] = (prevc == '?') ? '?' : '*';
+                packet_buf[i++] = (prevc == '?') ? '?' : '*';
             else {
                 if (prevc == '?' || (sep_count > 0 && sep_count != PACKET_SEPARATOR_SIZE)) {
                     c = prevc = i = sep_count = 0;
                     continue;
                 }
                 if (c != '?')
-                    packet[i++] = c;
+                    packet_buf[i++] = c;
             }
             prevc = c;
         }
@@ -106,39 +97,39 @@ void *receive_server_packets(void *arg) {
 /* send packets to server */
 void *send_client_packets(void *arg) {
     /* process thread arguments */
-    send_thread_args *sta = (send_thread_args *) arg;
-    int socket = sta->socket;
-    send_memory_config *send_mem_cfg = sta->send_mem_cfg;
+    client_send_thread_args *csta = (client_send_thread_args *) arg;
+    client_send_memory *send_mem = csta->send_mem;
+    int socket = csta->socket;
 
     /* initialize packet number counter for sent packets */
     uint32_t send_pn = 0;
 
     /* allocate buffers for storing packets before they are sent (buffering) */
-    char packet[PACKET_FROM_CLIENT_MAX_SIZE];
-    char final_packet[2 * PACKET_FROM_CLIENT_MAX_SIZE]; /* assume that all characters in array "packet" could get encoded */ 
+    char buf[PACKET_HEADER_SIZE + PACKET_FROM_CLIENT_MAX_DATA_SIZE];
+    char final_buf[sizeof(buf) * 2 + PACKET_SEPARATOR_SIZE];
 
     while(1) {
-        if (*(send_mem_cfg->packet_ready) == PACKET_READY_TRUE) {
-            switch (*(send_mem_cfg->pid)) {
+        if (send_mem->packet_ready == PACKET_READY_TRUE) {
+            switch (send_mem->pid) {
                 case PACKET_JOIN_ID:
-                    send_packet(send_pn++, PACKET_JOIN_DATA_SIZE, send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
+                    send_client_packet(send_pn++, PACKET_JOIN_DATA_SIZE, send_mem, buf, final_buf, socket);
                     break;
                 case PACKET_MESSAGE_ID:
-                    send_packet(send_pn++, PACKET_MESSAGE_DATA_SIZE, send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
+                    send_client_packet(send_pn++, PACKET_MESSAGE_DATA_SIZE, send_mem, buf, final_buf, socket);
                     break;
                 case PACKET_PLAYER_READY_ID:
-                    send_packet(send_pn++, PACKET_PLAYER_READY_DATA_SIZE, send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
+                    send_client_packet(send_pn++, PACKET_PLAYER_READY_DATA_SIZE, send_mem, buf, final_buf, socket);
                     break;
                 case PACKET_PLAYER_INPUT_ID:
-                    send_packet(send_pn++, PACKET_PLAYER_READY_DATA_SIZE, send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
+                    send_client_packet(send_pn++, PACKET_PLAYER_READY_DATA_SIZE, send_mem, buf, final_buf, socket);
                     break;
                 case PACKET_CHECK_STATUS_ID:
-                    send_packet(send_pn++, PACKET_CHECK_STATUS_DATA_SIZE, send_mem_cfg, packet, sizeof(packet), final_packet, sizeof(final_packet), socket);
+                    send_client_packet(send_pn++, PACKET_CHECK_STATUS_DATA_SIZE, send_mem, buf, final_buf, socket);
                     break;
                 default:
-                    printf("Invalid pid (%u)\n", (unsigned) *(send_mem_cfg->pid));
+                    printf("Invalid pid (%u)\n", (unsigned) send_mem->pid);
             }
-            *(send_mem_cfg->packet_ready) = PACKET_READY_FALSE;
+            send_mem->packet_ready = PACKET_READY_FALSE;
         }
         else
             sleep(PACKET_READY_WAIT_TIME);
@@ -148,73 +139,133 @@ void *send_client_packets(void *arg) {
 }
 
 /* process already validated packets */
-void process_server_packets(recv_memory_config *recv_mem_cfg, send_memory_config *send_mem_cfg) {
+void process_server_packets(client_shared_memory *sh_mem) {
+    client_recv_memory *recv_mem = &sh_mem->recv_mem;
+    client_send_memory *send_mem = &sh_mem->send_mem;
+    char *packet_ready = &recv_mem->packet_ready;
+    unsigned char pid = *((unsigned char *) recv_mem->packet_buf + PACKET_NUMBER_SIZE);
+    char *pdata = recv_mem->packet_buf + PACKET_HEADER_SIZE;
+
     while(1) {
-        if (*(recv_mem_cfg->packet_ready) == PACKET_READY_TRUE) {
-            switch (*(recv_mem_cfg->pid)) {
+        if (*packet_ready == PACKET_READY_TRUE) {
+            switch (pid) {
                 case PACKET_ACCEPT_ID:
-                    process_accept(recv_mem_cfg->pdata, send_mem_cfg);
+                    process_accept(pdata, send_mem);
                     break;
                 case PACKET_MESSAGE_ID:
-                    process_message_from_server(recv_mem_cfg->pdata, send_mem_cfg);
+                    process_message_from_server(pdata, send_mem);
                     break;
                 case PACKET_LOBBY_ID:
-                    process_lobby(recv_mem_cfg->pdata);
+                    process_lobby(pdata, send_mem);
                     break;
                 case PACKET_GAME_READY_ID:
-                    process_game_ready(recv_mem_cfg->pdata);
+                    process_game_ready(pdata, send_mem);
                     break;
                 case PACKET_GAME_STATE_ID:
-                    process_game_state(recv_mem_cfg->pdata);
+                    process_game_state(pdata, send_mem);
                     break;
                 case PACKET_GAME_END_ID:
-                    process_game_end(recv_mem_cfg->pdata);
+                    process_game_end(pdata, send_mem);
                     break;
                 default:
-                    printf("Invalid pid (%u)\n", (unsigned) *(recv_mem_cfg->pid));
+                    printf("Invalid pid (%u)\n", (unsigned) pid);
             }
-            *(recv_mem_cfg->packet_ready) = PACKET_READY_FALSE;
+            *packet_ready = PACKET_READY_FALSE;
         }
         else
             sleep(PACKET_READY_WAIT_TIME);
     }
 }
 
-void process_accept(char *data, send_memory_config *send_mem_cfg) {
+void process_accept(char *data, client_send_memory *send_mem) {
     char status = *data;
-
     printf("RECEIVED ACCEPT, status=%d\n", status);
-    send_message(1, 0, "Cau", send_mem_cfg);
+
+    // process
 }
 
-void process_message_from_server(char *data, send_memory_config *send_mem_cfg) {
+void process_message_from_server(char *data, client_send_memory *send_mem) {
     char *data_ptr = data;
     char type = *data_ptr;
     data_ptr += 1;
     char source_id = *data_ptr;
     data_ptr += 1;
     char *message = data_ptr;
-
     printf("RECEIVED MESSAGE, type=%d, source_id=%d, message=%s\n", type, source_id, message);
-    send_message(2, -1, "I received your message, mr. server", send_mem_cfg);
-}
-
-void process_lobby(char *data) {
     
+    // process
 }
 
-void process_game_ready(char *data) {
-
+void process_lobby(char *data, client_send_memory *send_mem) {
+    // process
+    // drawLobby(data, ...);
 }
 
-void process_game_state(char *data) {
-
+void process_game_ready(char *data, client_send_memory *send_mem) {
+    // process
 }
 
-void process_game_end(char *data) {
+void process_game_state(char *data, client_send_memory *send_mem) {
+    // process
+}
 
+void process_game_end(char *data, client_send_memory *send_mem) {
+    // process
 }
 
 
+void send_client_packet(uint32_t pn, int32_t psize, client_send_memory *send_mem, char *buf, char *final_buf, int socket) {
+    send_packet(pn, send_mem->pid, psize, send_mem->pdata, send_mem->datalen, 
+                    buf, PACKET_HEADER_SIZE + PACKET_FROM_CLIENT_MAX_DATA_SIZE, 
+                    final_buf, (PACKET_HEADER_SIZE + PACKET_FROM_CLIENT_MAX_DATA_SIZE) * 2 + PACKET_SEPARATOR_SIZE, 
+                    socket);
+}
 
+void send_join(char *name, client_send_memory *send_mem) {
+    size_t namelen;
 
+    /* check if name is not too long */
+    namelen = strlen(name);
+    if (namelen > MAX_NAME_SIZE - 1)
+        namelen = MAX_NAME_SIZE - 1;
+
+    /* wait until send buffer becomes available */
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    /* when send buffer is available, fill it with join packet data */
+    send_mem->pid = PACKET_JOIN_ID;
+    send_mem->datalen = insert_str(name, namelen, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_player_ready(char player_id, client_send_memory *send_mem) {
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_PLAYER_READY_ID;
+    send_mem->datalen = insert_char(player_id, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_player_input(char input, client_send_memory *send_mem) {
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_PLAYER_INPUT_ID;
+    send_mem->datalen = insert_char(input, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void send_check_status(client_send_memory *send_mem) {
+    // do nothing
+}
+
+void send_game_type(char type, client_send_memory *send_mem) {
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_GAME_TYPE_ID;
+    send_mem->datalen = insert_char(type, send_mem->pdata, sizeof(send_mem->pdata), 0);
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}

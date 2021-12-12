@@ -4,66 +4,89 @@
 #include "pong_game.h"
 #include "pong_networking.h"
 
+typedef struct _server_recv_memory {
+    char packet_ready;
+    char packet_buf[PACKET_FROM_CLIENT_MAX_SIZE];
+} server_recv_memory;
 
-#define CLIENT_COUNT_SIZE                   1
-#define CLIENT_TAKEN_SIZE                   1
-#define CLIENT_STATE_SIZE                   1
-#define SERVER_RECV_MEMORY_SIZE             (PACKET_READY_SIZE + PACKET_FROM_CLIENT_MAX_SIZE)
-#define SERVER_SEND_MEMORY_SIZE             (PACKET_READY_SIZE + PACKET_ID_SIZE + PACKET_SIZE_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE)
-#define SERVER_SHARED_CLIENT_DATA_SIZE      (CLIENT_TAKEN_SIZE + MAX_NAME_SIZE + INPUT_SIZE + CLIENT_STATE_SIZE + SERVER_RECV_MEMORY_SIZE + SERVER_SEND_MEMORY_SIZE)
-#define SERVER_SHARED_MEMORY_SIZE           (CLIENT_COUNT_SIZE + MAX_CLIENTS * SERVER_SHARED_CLIENT_DATA_SIZE + (MAX_CLIENTS + (2 - 1)) / 2 * GAME_STATE_SIZE) /* max memory if everyone plays 1v1 */
+typedef struct _server_send_memory {
+    char packet_ready;
+    unsigned char pid;
+    int32_t datalen;
+    char pdata[PACKET_FROM_SERVER_MAX_DATA_SIZE];
+} server_send_memory;
 
-typedef struct _server_server_shared_memory_config {
-    char *shared_memory;
-    unsigned char *client_count;
-    char *shared_client_data;
-    char *shared_gamestate_data;
-} server_shared_memory_config;
+typedef struct _client client;
+typedef struct _lobby {
+    char player_count;
+    client *players[MAX_PLAYER_COUNT];
+} lobby;
 
-typedef struct _client_data {
-    int id;
+typedef struct _client {
+    char id;
     int socket;
-    char *client_data;
-    unsigned char *taken;
-    char *name;
-    char *input;
-    char *state;
-    recv_memory_config recv_mem_cfg;
-    send_memory_config send_mem_cfg;
-} client_data;
+    char name[MAX_NAME_SIZE];
+    char state;
+    lobby *lobby;
+    game_state *game_state;
+    server_recv_memory recv_mem;
+    server_send_memory send_mem;
+} client;
 
-typedef struct _server_recv_thread_args {
-    client_data *cd;
-    server_shared_memory_config *sh_mem_cfg;
-} server_recv_thread_args;
+typedef struct _server_shared_memory {
+    unsigned char client_count;
+    client clients[MAX_CLIENTS];
+    lobby lobby_1v1;
+    lobby lobby_2v2;
+    game_state game_states[(MAX_CLIENTS + (2 - 1)) / 2];
+} server_shared_memory;
+
+typedef struct _server_recv_send_thread_args {
+    client *client;
+    server_shared_memory *sh_mem;
+} server_recv_send_thread_args;
+
 
 /* init */
-void get_shared_memory(server_shared_memory_config *sh_mem_cfg);
-void start_network(char *port, server_shared_memory_config *sh_mem_cfg);
+server_shared_memory *get_server_shared_memory(void);
+void start_network(char *port, server_shared_memory *sh_mem);
+void init_lobby(lobby *lob);
 
 /* game */
-void gameloop(server_shared_memory_config *sh_mem_cfg);
+void gameloop(server_shared_memory *sh_mem);
 
 /* client processing */
-void accept_clients(int server_socket, server_shared_memory_config *sh_mem_cfg);
-int find_free_client_id(server_shared_memory_config *sh_mem_cfg);
-void process_client(int id, int socket, server_shared_memory_config *sh_mem_cfg);
-void remove_client(client_data *cd, server_shared_memory_config *sh_mem_cfg);
-char *get_client_data_ptr(int id, server_shared_memory_config *sh_mem_cfg);
-void get_client_data(int id, int socket, server_shared_memory_config *sh_mem_cfg, client_data *client_data);
+void accept_clients(int server_socket, server_shared_memory *sh_mem);
+client *init_client(server_shared_memory *sh_mem, int socket);
+void process_client(client *client, server_shared_memory *sh_mem);
+void remove_client(client *client, server_shared_memory *sh_mem);
 
 /* packet processing */
 void *receive_client_packets(void *arg);
 void *send_server_packets(void *arg);
-void process_client_packets(client_data *cd);
-void process_join(char *data, client_data *cd);
-void process_message_from_client(char *data, client_data *cd);
-void process_player_ready(client_data *cd);
-void process_player_input(char *data, client_data *cd);
-void process_check_status(client_data *cd);
+
+void process_client_packets(client *client);
+void process_join(char *data, client *client);
+void process_message_from_client(char *data, client *client);
+void process_player_ready(client *client);
+void process_player_input(char *data, client *client);
+void process_check_status(client *client);
+void process_game_type(char *data, client *client);
+
+void send_server_packet(uint32_t pn, int32_t psize, server_send_memory *send_mem, char *buf, char *final_buf, int socket);
+void send_accept(char player_id, client *client);
+void send_message_from_server(char type, char source_id, char *message, client *client);
+void send_lobby(client *client);
+void send_game_ready(client *client);
+void send_game_state(client *client);
+void send_game_end(client *client);
+
+/* helpers */
+int find_team_score(client *client);
+int is_alphanum(char *data, size_t datalen);
 
 /* debug */
-void print_client_data(client_data *cd);
-void print_shared_memory(server_shared_memory_config *sh_mem_cfg);
+void print_client(client *client);
+void print_shared_memory(server_shared_memory *sh_mem);
 
 #endif
