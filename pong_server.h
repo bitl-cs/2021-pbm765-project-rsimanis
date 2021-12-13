@@ -8,14 +8,14 @@
 
 #define MAX_GAME_STATES                 (MAX_CLIENTS / 2)   /* max number of game states at any moment (this number is achieved if maximum number of clients has connected and everyone plays a 1v1 match) */
 #define CLIENT_ID_TAKEN_FALSE           -1                  /* when client memory is not occupied, its id is set to this value */
-#define LOBBYLOOP_UPDATE_INTERVAL       1/70.0              /* time interval (in seconds) between two lobby updates */
+#define LOBBYLOOP_UPDATE_INTERVAL       1/5.0               /* time interval (in seconds) between two lobby updates */
 
-#define CLIENT_STATE_JOIN               0           /* player sees the join screen */
-#define CLIENT_STATE_MENU               1           /* player sees the main menu (1v1 and 2v2 buttons) */
-#define CLIENT_STATE_LOBBY              2           /* player sees his/her lobby */
-#define CLIENT_STATE_LOADING            3           /* player sees the game loading screen before match */
-#define CLIENT_STATE_GAME               4           /* player sees the game - he is playing pong (hopefully) */ 
-#define CLIENT_STATE_STATISTICS         5           /* player sees the statistics screen (or error if game finished erroneously*/
+#define CLIENT_STATE_JOIN               0                   /* player sees the join screen */
+#define CLIENT_STATE_MENU               1                   /* player sees the main menu (1v1 and 2v2 buttons) */
+#define CLIENT_STATE_LOBBY              2                   /* player sees his/her lobby */
+#define CLIENT_STATE_LOADING            3                   /* player sees the game loading screen before match */
+#define CLIENT_STATE_GAME               4                   /* player sees the game - he is playing pong (hopefully) */ 
+#define CLIENT_STATE_STATISTICS         5                   /* player sees the statistics screen (or error if game finished erroneously*/
 
 typedef struct _server_recv_memory {
     char packet_ready;
@@ -92,33 +92,33 @@ void remove_client(client *client, server_shared_memory *sh_mem);
 
 /* packet processing */
 void *receive_client_packets(void *arg);
-void *send_server_packets(void *arg);
 
 void process_client_packets(client *client, server_shared_memory *sh_mem);
-void process_join(char *data, client *client);
-void process_message_from_client(char *data, client *client);
-void process_player_ready(client *client);
-void process_player_input(char *data, client *client);
+void process_join(char *data, client *client, server_shared_memory *sh_mem);
+void process_message_from_client(char *data, client *client, server_shared_memory *sh_mem);
+void process_player_ready(client *client, server_shared_memory *sh_mem);
+void process_player_input(char *data, client *client, server_shared_memory *sh_mem);
 void process_check_status(client *client);
 void process_game_type(char *data, client *client, server_shared_memory *sh_mem);
 
+void *send_server_packets(void *arg);
 void send_server_packet(uint32_t pn, int32_t psize, server_send_memory *send_mem, char *buf, char *final_buf, int socket);
 void send_accept(char player_id, client *client);
 void send_message_from_server(char type, char source_id, char *message, client *client);
 void send_lobby(client *client);
 void send_game_ready(client *client);
 void send_game_state(client *client);
-void send_game_end(client *client);
+void send_game_end(int team_score, client *client);
+void send_return_to_menu(client *client);
 
 /* helpers */
-client *find_client_by_id(char id, server_shared_memory *sh_mem);
-game_state *find_free_game_state(server_shared_memory *sh_mem);
+game_state *get_free_game_state(server_shared_memory *sh_mem);
 void add_client_to_lobby(client* client, lobby *lobby);
-int find_team_score(client *client);
 int is_alphanum(char *data, size_t datalen);
 
 /* debug */
 void print_client(client *client);
+void print_lobby(lobby *lobby);
 void print_shared_memory(server_shared_memory *sh_mem);
 
 #endif

@@ -40,20 +40,21 @@ client_shared_memory *get_client_shared_memory(void);
 void *receive_server_packets(void *arg);
 void *send_client_packets(void *arg);
 
-void process_server_packets(client_shared_memory *sh_mem);
-void process_accept(char *data, client_send_memory *sh_mem);
-void process_message_from_server(char *data, client_send_memory *sh_mem);
-void process_lobby(char *data, client_send_memory *sh_mem);
-void process_game_ready(char *data, client_send_memory *sh_mem);
-void process_game_state(char *data, client_send_memory *sh_mem);
-void process_game_end(char *data, client_send_memory *sh_mem);
+void process_server_packets(client_shared_memory *send_mem);
+void process_accept(char *data, client_send_memory *send_mem);
+void process_message_from_server(char *data, client_send_memory *send_mem);
+void process_lobby(char *data, client_send_memory *send_mem);
+void process_game_ready(char *data, client_send_memory *send_mem);
+void process_game_state(char *data, client_send_memory *send_mem);
+void process_game_end(char *data, client_send_memory *send_mem);
+void process_return_to_menu(client_send_memory *send_mem);
 
 void send_client_packet(uint32_t pn, int32_t psize, client_send_memory *send_mem, char *buf, char *final_buf, int socket);
-void send_join(char *name, client_send_memory *sh_mem);
-void send_message_from_client(char target_id, char source_id, char *message, client_send_memory *sh_mem);
-void send_player_ready(char player_id, client_send_memory *sh_mem);
-void send_player_input(char input, client_send_memory *sh_mem);
-void send_check_status(client_send_memory *sh_mem);
-void send_game_type(char type, client_send_memory *sh_mem);
+void send_join(char *name, client_send_memory *send_mem);
+void send_message_from_client(char target_id, char source_id, char *message, client_send_memory *send_mem);
+void send_player_ready(char player_id, client_send_memory *send_mem);
+void send_player_input(char input, client_send_memory *send_mem);
+void send_check_status(client_send_memory *send_mem);
+void send_game_type(char type, client_send_memory *send_mem);
 
 #endif

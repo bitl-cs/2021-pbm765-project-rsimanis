@@ -10,9 +10,9 @@
 #include <pthread.h>
 
 
+/* general */
 #define MAX_CLIENTS                         5
 
-/* general */
 #define PACKET_NUMBER_SIZE                  4 
 #define PACKET_ID_SIZE                      1 
 #define PACKET_SIZE_SIZE                    4 
@@ -33,6 +33,7 @@
 #define PACKET_READY_FALSE                  0
 #define PACKET_READY_WAIT_TIME              1/100.0
 
+#define PACKET_NUMBER_UPPER_ALLOWANCE       50      /* packet verification will pass if receiving packet number is this amount from its maximum and extracted packet number is greater or equal than 0 */
 #define THREAD_INIT_WAIT_TIME               1/4.0
 
 #define DEFAULT_PORT                        "12345"
@@ -91,6 +92,10 @@
 #define PACKET_GAME_TYPE_DATA_SIZE          1
 #define PACKET_GAME_TYPE_TYPE_1V1           1
 #define PACKET_GAME_TYPE_TYPE_2V2           2
+
+#define PACKET_RETURN_TO_MENU_ID            12
+#define PACKET_RETURN_TO_MENU_SIZE          (PACKET_HEADER_SIZE + PACKET_RETURN_TO_MENU_DATA_SIZE + PACKET_FOOTER_SIZE)
+#define PACKET_RETURN_TO_MENU_DATA_SIZE     0
 
 
 /* intialization */

@@ -70,17 +70,17 @@ void reset_lobby(lobby *lobby) {
 void init_teams(game_state *gs) {
     team *left_team, *right_team;
 
-    gs->team_count = INITIAL_TEAM_COUNT;
+    gs->team_count = TEAM_INITIAL_COUNT;
 
     /* initialize left team */
     left_team = &gs->teams[LEFT_TEAM_ID];
-    init_team(left_team, LEFT_TEAM_ID, INITIAL_TEAM_SCORE, 
+    init_team(left_team, LEFT_TEAM_ID, TEAM_INITIAL_SCORE, 
                 LEFT_GOAL_LINE_UPPER_X, LEFT_GOAL_LINE_UPPER_Y,
                 LEFT_GOAL_LINE_BOTTOM_X, LEFT_GOAL_LINE_BOTTOM_Y);
 
     /* initialize right team */
     right_team = &gs->teams[RIGHT_TEAM_ID];
-    init_team(right_team, RIGHT_TEAM_ID, INITIAL_TEAM_SCORE, 
+    init_team(right_team, RIGHT_TEAM_ID, TEAM_INITIAL_SCORE, 
                 RIGHT_GOAL_LINE_UPPER_X, RIGHT_GOAL_LINE_UPPER_Y,
                 RIGHT_GOAL_LINE_BOTTOM_X, RIGHT_GOAL_LINE_BOTTOM_Y);
 }
@@ -89,60 +89,60 @@ void init_back_players(game_state *gs, lobby *lobby) {
     player *left_player, *right_player;
 
     /* initialize left player */
-    left_player = &gs->players[BACK_LEFT_PLAYER_INDEX];
-    init_player(left_player, lobby->clients[BACK_LEFT_PLAYER_INDEX]->id, LEFT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[BACK_LEFT_PLAYER_INDEX]->name, INITIAL_PLAYER_SCORE,  
-                INITIAL_LEFT_BACK_PLAYER_X, INITIAL_LEFT_BACK_PLAYER_Y, 
-                INITIAL_PLAYER_VELOCITY_X, INITIAL_PLAYER_VELOCITY_Y, 
-                INITIAL_PLAYER_ACCELERATION_X, INITIAL_PLAYER_ACCELERATION_Y, 
-                INITIAL_PLAYER_WIDTH, INITIAL_PLAYER_HEIGHT);
+    left_player = &gs->players[LEFT_BACK_PLAYER_ID];
+    init_player(left_player, LEFT_BACK_PLAYER_ID, lobby->clients[LEFT_BACK_PLAYER_ID]->id, LEFT_TEAM_ID,
+                PLAYER_READY_FALSE, lobby->clients[LEFT_BACK_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+                LEFT_BACK_PLAYER_INITIAL_X, LEFT_BACK_PLAYER_INITIAL_Y, 
+                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
+                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
+                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
 
     /* initialize right player */
-    right_player = &gs->players[BACK_RIGHT_PLAYER_INDEX];
-    init_player(right_player, lobby->clients[BACK_RIGHT_PLAYER_INDEX]->id, RIGHT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[BACK_RIGHT_PLAYER_INDEX]->name, INITIAL_PLAYER_SCORE,  
-                INITIAL_RIGHT_BACK_PLAYER_X, INITIAL_RIGHT_BACK_PLAYER_Y, 
-                INITIAL_PLAYER_VELOCITY_X, INITIAL_PLAYER_VELOCITY_Y, 
-                INITIAL_PLAYER_ACCELERATION_X, INITIAL_PLAYER_ACCELERATION_Y, 
-                INITIAL_PLAYER_WIDTH, INITIAL_PLAYER_HEIGHT);
+    right_player = &gs->players[RIGHT_BACK_PLAYER_ID];
+    init_player(right_player, RIGHT_BACK_PLAYER_ID, lobby->clients[RIGHT_BACK_PLAYER_ID]->id, RIGHT_TEAM_ID,
+                PLAYER_READY_FALSE, lobby->clients[RIGHT_BACK_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+                RIGHT_BACK_PLAYER_INITIAL_X, RIGHT_BACK_PLAYER_INITIAL_Y,
+                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
+                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
+                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
 }
 
 void init_front_players(game_state *gs, lobby *lobby) {
     player *left_player, *right_player;
 
     /* initialize left player */
-    left_player = &gs->players[FRONT_LEFT_PLAYER_INDEX];
-    init_player(left_player, lobby->clients[FRONT_LEFT_PLAYER_INDEX]->id, LEFT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[FRONT_LEFT_PLAYER_INDEX]->name, INITIAL_PLAYER_SCORE,  
-                INITIAL_LEFT_FRONT_PLAYER_X, INITIAL_LEFT_FRONT_PLAYER_Y, 
-                INITIAL_PLAYER_VELOCITY_X, INITIAL_PLAYER_VELOCITY_Y, 
-                INITIAL_PLAYER_ACCELERATION_X, INITIAL_PLAYER_ACCELERATION_Y, 
-                INITIAL_PLAYER_WIDTH, INITIAL_PLAYER_HEIGHT);
+    left_player = &gs->players[LEFT_FRONT_PLAYER_ID];
+    init_player(left_player, LEFT_FRONT_PLAYER_ID, lobby->clients[LEFT_FRONT_PLAYER_ID]->id, LEFT_TEAM_ID,
+                PLAYER_READY_FALSE, lobby->clients[LEFT_FRONT_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+                LEFT_FRONT_PLAYER_INITIAL_X, LEFT_FRONT_PLAYER_INITIAL_Y, 
+                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
+                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
+                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
 
     /* initialize right player */
-    right_player = &gs->players[FRONT_RIGHT_PLAYER_INDEX];
-    init_player(right_player, lobby->clients[FRONT_RIGHT_PLAYER_INDEX]->id, RIGHT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[FRONT_RIGHT_PLAYER_INDEX]->name, INITIAL_PLAYER_SCORE,  
-                INITIAL_RIGHT_FRONT_PLAYER_X, INITIAL_RIGHT_FRONT_PLAYER_Y, 
-                INITIAL_PLAYER_VELOCITY_X, INITIAL_PLAYER_VELOCITY_Y, 
-                INITIAL_PLAYER_ACCELERATION_X, INITIAL_PLAYER_ACCELERATION_Y, 
-                INITIAL_PLAYER_WIDTH, INITIAL_PLAYER_HEIGHT);
+    right_player = &gs->players[RIGHT_FRONT_PLAYER_ID];
+    init_player(right_player, RIGHT_FRONT_PLAYER_ID, lobby->clients[RIGHT_FRONT_PLAYER_ID]->id, RIGHT_TEAM_ID,
+                PLAYER_READY_FALSE, lobby->clients[RIGHT_FRONT_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+                RIGHT_FRONT_PLAYER_INITIAL_X, RIGHT_FRONT_PLAYER_INITIAL_Y, 
+                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
+                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
+                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
 }
 
 void init_balls(game_state *gs) {
     ball *ball;
 
-    gs->ball_count = INITIAL_BALL_COUNT;
+    gs->ball_count = BALL_INITIAL_COUNT;
 
     ball = &gs->balls[0];
-    init_ball(ball, INITIAL_BALL_X, INITIAL_BALL_Y, 
-                INITIAL_BALL_VELOCITY_X, INITIAL_BALL_VELOCITY_Y,
-                INITIAL_BALL_ACCELERATION_X, INITIAL_BALL_ACCELERATION_Y,
-                INITIAL_BALL_RADIUS, BALL_TYPE_NORMAL);
+    init_ball(ball, BALL_INITIAL_X, BALL_INITIAL_Y, 
+                BALL_INITIAL_VELOCITY_X, BALL_INITIAL_VELOCITY_Y,
+                BALL_INITIAL_ACCELERATION_X, BALL_INITIAL_ACCELERATION_Y,
+                BALL_INITIAL_RADIUS, BALL_TYPE_NORMAL, BALL_INITIAL_LAST_TOUCHED_ID);
 }
 
 void init_power_ups(game_state *gs) {
-    gs->power_up_count = INITIAL_POWER_UP_COUNT;
+    gs->power_up_count = POWER_UP_INITIAL_COUNT;
 }
 
 void init_game_1v1(game_state *gs, lobby *lobby) {
@@ -155,10 +155,14 @@ void init_game_1v1(game_state *gs, lobby *lobby) {
         return;
     }
 
+    gs->game_type = GAME_TYPE_1V1;
+    init_window(gs);
     init_teams(gs);
     init_back_players(gs, lobby); /* in 1v1 game mode, only back players are playing */
     init_balls(gs);
     init_power_ups(gs);
+
+    start_game(gs);
 }
 
 void init_game_2v2(game_state *gs, lobby *lobby) {
@@ -171,17 +175,23 @@ void init_game_2v2(game_state *gs, lobby *lobby) {
         return;
     }
 
+    gs->game_type = GAME_TYPE_2V2;
+    init_window(gs);
     init_teams(gs);
     init_back_players(gs, lobby);
     init_front_players(gs, lobby);
     init_balls(gs);
     init_power_ups(gs);
+
+    start_game(gs);
 }
 
 /* game */
 void lobbyloop(server_shared_memory *sh_mem) {
-    update_lobby(&sh_mem->lobby_1v1, sh_mem);
-    update_lobby(&sh_mem->lobby_2v2, sh_mem);
+    while (1) {
+        update_lobby(&sh_mem->lobby_1v1, sh_mem);
+        update_lobby(&sh_mem->lobby_2v2, sh_mem);
+    }
 }
 
 void update_lobby(lobby *lobby, server_shared_memory *sh_mem) {
@@ -196,7 +206,7 @@ void update_lobby(lobby *lobby, server_shared_memory *sh_mem) {
         lobby->last_update = now;
         if (lobby->client_count == lobby->max_clients) {
             /* start game */
-            gs = find_free_game_state(sh_mem);
+            gs = get_free_game_state(sh_mem);
             if (gs == NULL) {
                 printf("Currently no free game state available (should not happen)\n");
                 return;
@@ -224,6 +234,7 @@ void gameloop(server_shared_memory *sh_mem) {
     char i, j;
     game_state *gs;
     client *c;
+    player *p;
 
     printf("Starting game loop! (It will run forever - use Ctrl+C)\n");
     while (1) {
@@ -233,9 +244,10 @@ void gameloop(server_shared_memory *sh_mem) {
                 update_game_state(gs);
             else if (gs->status == GAME_STATE_STATUS_SUCCESS || gs->status == GAME_STATE_STATUS_ERROR) {
                 for (j = 0; j < gs->player_count; j++) {
-                    c = find_client_by_id(gs->players[j].id, sh_mem);
+                    p = &gs->players[j];
+                    c = &sh_mem->clients[p->client_id];
                     c->state = CLIENT_STATE_STATISTICS;
-                    send_game_end(c);
+                    send_game_end(gs->teams[p->team_id].score ,c);
                     if (gs->status == GAME_STATE_STATUS_ERROR)
                         send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, "Something went wrong", c);
                 }
@@ -392,9 +404,11 @@ void *receive_client_packets(void *arg) {
                         // print_bytes(packet, i);
 
                         /* verify packet */
-                        *packet_ready = verify_packet(recv_pn, packet_buf, i);
+                        if (verify_packet(recv_pn, packet_buf, i) != 0) {
+                            *packet_ready = PACKET_READY_TRUE;
+                            recv_pn = *pn + 1;
+                        }
 
-                        recv_pn++;
                         c = prevc = i = sep_count = 0;
                         continue;
                     }
@@ -427,62 +441,27 @@ void *receive_client_packets(void *arg) {
     return NULL;
 }
 
-void *send_server_packets(void *arg) {
-    /* process thread arguments */
-    server_recv_send_thread_args *srsta = (server_recv_send_thread_args *) arg;
-    client *client = srsta->client;
-    server_shared_memory *sh_mem = srsta->sh_mem;
-
-    /* initialize packet number counter for sent packets */
-    uint32_t send_pn = 0;
-
-    /* allocate buffers for storing packets before they are sent (buffering) */
-    server_send_memory *send_mem = &client->send_mem;
-    char buf[PACKET_HEADER_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE];
-    char final_buf[sizeof(buf) * 2 + PACKET_SEPARATOR_SIZE];
-
-    while(1) {
-        if (send_mem->packet_ready == PACKET_READY_TRUE) {
-            if (send_mem->pid == PACKET_ACCEPT_ID)
-                send_server_packet(send_pn++, PACKET_ACCEPT_DATA_SIZE, send_mem, buf, final_buf, client->socket);
-            else if (send_mem->pid == PACKET_MESSAGE_ID)
-                send_server_packet(send_pn++, PACKET_MESSAGE_DATA_SIZE, send_mem, buf, final_buf, client->socket);
-            else if (send_mem->pid == PACKET_LOBBY_ID ||
-                        send_mem->pid == PACKET_GAME_READY_ID ||
-                        send_mem->pid == PACKET_GAME_STATE_ID ||
-                        send_mem->pid == PACKET_GAME_END_ID)
-                send_server_packet(send_pn++, send_mem->datalen, send_mem, buf, final_buf, client->socket);
-            else
-                printf("Invalid pid (%u)\n", (unsigned) send_mem->pid);
-            send_mem->packet_ready = PACKET_READY_FALSE;
-        }
-        else
-            sleep(PACKET_READY_WAIT_TIME);
-    }
-
-    return NULL;
-}
 
 void process_client_packets(client *client, server_shared_memory *sh_mem) {
     server_recv_memory *recv_mem = &(client->recv_mem);
     char *packet_ready = &recv_mem->packet_ready;
-    unsigned char pid = *((unsigned char *) recv_mem->packet_buf + PACKET_NUMBER_SIZE);
+    unsigned char *pid = (unsigned char *) (recv_mem->packet_buf + PACKET_NUMBER_SIZE);
     char *pdata = recv_mem->packet_buf + PACKET_HEADER_SIZE;
 
     while (1) {
         if (*packet_ready == PACKET_READY_TRUE) {
-            switch (pid) {
+            switch (*pid) {
                 case PACKET_JOIN_ID:
-                    process_join(pdata, client);
+                    process_join(pdata, client, sh_mem);
                     break;
                 case PACKET_MESSAGE_ID:
-                    process_message_from_client(pdata, client);
+                    process_message_from_client(pdata, client, sh_mem);
                     break;
                 case PACKET_PLAYER_READY_ID:
-                    process_player_ready(client);
+                    process_player_ready(client, sh_mem);
                     break;
                 case PACKET_PLAYER_INPUT_ID:
-                    process_player_input(pdata, client);
+                    process_player_input(pdata, client, sh_mem);
                     break;
                 case PACKET_CHECK_STATUS_ID:
                     process_check_status(client);
@@ -491,7 +470,7 @@ void process_client_packets(client *client, server_shared_memory *sh_mem) {
                     process_game_type(pdata, client, sh_mem);
                     break;
                 default:
-                    printf("Invalid pid (%u)\n", pid);
+                    printf("Invalid pid (%u)\n", *pid);
             }
             *packet_ready = PACKET_READY_FALSE;
         }
@@ -500,10 +479,10 @@ void process_client_packets(client *client, server_shared_memory *sh_mem) {
     }
 }
 
-void process_join(char *data, client *client) {
+void process_join(char *data, client *client, server_shared_memory *sh_mem) {
     char *name;
     size_t namelen;
-    printf("RECEIVED JOIN, NAME = %s\n", name);
+    printf("Received JOIN from client (id=%d)\n", client->id);
 
     if (client->state == CLIENT_STATE_JOIN) {
         name = data;
@@ -522,7 +501,7 @@ void process_join(char *data, client *client) {
         }
         else {
             // everything ok
-            insert_str(name, namelen, client->name, MAX_NAME_SIZE, 0);
+            insert_str(name, namelen, client->name, sizeof(client->name), 0);
             client->state = CLIENT_STATE_MENU;
             send_accept(client->id, client);
         }
@@ -530,12 +509,13 @@ void process_join(char *data, client *client) {
     else {
         printf("Client (id=%d) send JOIN packet while being in wrong state (state=%d)\n", client->id, client->state);
     }
+    // print_shared_memory(sh_mem);
 }
 
-void process_message_from_client(char *data, client *client) {
+void process_message_from_client(char *data, client *client, server_shared_memory *sh_mem) {
     char target_id, source_id, *message, i;
     size_t mlen;
-    // printf("Received MESSAGE from client (id=%d, socket=%d), type=%d, source_id=%d, message=%s\n", cd->id, cd->socket, type, source_id, message);
+    printf("Received MESSAGE from client (id=%d)\n", client->id);
 
     if (client->state == CLIENT_STATE_LOBBY) {
         target_id = *data;
@@ -560,7 +540,8 @@ void process_message_from_client(char *data, client *client) {
     }
 }
 
-void process_player_ready(client *client) {
+void process_player_ready(client *client, server_shared_memory *sh_mem) {
+    printf("Received PLAYER_READY from client (id=%d)\n", client->id);
     if (client->state == CLIENT_STATE_LOADING) {
         if (client->player == NULL) {
 
@@ -569,7 +550,8 @@ void process_player_ready(client *client) {
     }
 }
 
-void process_player_input(char *data, client *client) {
+void process_player_input(char *data, client *client, server_shared_memory *sh_mem) {
+    printf("Received PLAYER_INPUT from client (id=%d)\n", client->id);
     char input;
     char exit, down, up;
 
@@ -578,30 +560,33 @@ void process_player_input(char *data, client *client) {
     down = (input >> 1) & 1;
     up = (input >> 2) & 1;
 
-    if (client->state == CLIENT_STATE_GAME && client->player != NULL && (down || up)) {
-        if (down)
-            client->player->a.y = PLAYER_ACCELERATION_Y_MOD;
-        if (up)
-            client->player->a.y = -PLAYER_ACCELERATION_Y_MOD;
-    }
-
     if (exit) {
         if (client->state == CLIENT_STATE_STATISTICS) {
-            // TODO: move player to main menu (specific packet could be more reasonable)
-            // send_accept(client->id, client);
+            client->state = CLIENT_STATE_MENU;
+            send_accept(-2, client);
         }
-        else {
-            // maybe
-            // TODO: move player to join
-        }
+        else
+            remove_client(client, sh_mem);
+        return;
+    }
+
+    if (client->state == CLIENT_STATE_GAME && client->player != NULL) {
+        if (down && !up)
+            client->player->a.y = PLAYER_ACCELERATION_Y_MOD;
+        else if (up && !down)
+            client->player->a.y = -PLAYER_ACCELERATION_Y_MOD;
+        else
+            client->player->a.y = 0;
     }
 }
 
 void process_check_status(client *client) {
+    printf("Received CHECK_STATUS from client (id=%d)\n", client->id);
     // do nothing
 }
 
 void process_game_type(char *data, client *client, server_shared_memory *sh_mem) {
+    printf("Received GAME_TYPE from client (id=%d)\n", client->id);
     char type;
 
     if (client->state == CLIENT_STATE_MENU) {
@@ -615,8 +600,46 @@ void process_game_type(char *data, client *client, server_shared_memory *sh_mem)
     }
     else
         printf("Client (id=%d) send GAME_TYPE packet while being in wrong state (state=%d) \n", client->id, client->state);
+    // print_shared_memory(sh_mem);
 }
 
+
+void *send_server_packets(void *arg) {
+    /* process thread arguments */
+    server_recv_send_thread_args *srsta = (server_recv_send_thread_args *) arg;
+    client *client = srsta->client;
+    server_shared_memory *sh_mem = srsta->sh_mem;
+
+    /* initialize packet number counter for sent packets */
+    uint32_t send_pn = 0;
+
+    /* allocate buffers for storing packets before they are sent (buffering) */
+    server_send_memory *send_mem = &client->send_mem;
+    char buf[PACKET_HEADER_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE];
+    char final_buf[sizeof(buf) * 2 + PACKET_SEPARATOR_SIZE];
+
+    while(1) {
+        if (send_mem->packet_ready == PACKET_READY_TRUE) {
+            if (send_mem->pid == PACKET_ACCEPT_ID) {
+                send_server_packet(send_pn++, PACKET_ACCEPT_DATA_SIZE, send_mem, buf, final_buf, client->socket);
+            }
+            else if (send_mem->pid == PACKET_MESSAGE_ID)
+                send_server_packet(send_pn++, PACKET_MESSAGE_DATA_SIZE, send_mem, buf, final_buf, client->socket);
+            else if (send_mem->pid == PACKET_LOBBY_ID ||
+                        send_mem->pid == PACKET_GAME_READY_ID ||
+                        send_mem->pid == PACKET_GAME_STATE_ID ||
+                        send_mem->pid == PACKET_GAME_END_ID)
+                send_server_packet(send_pn++, send_mem->datalen, send_mem, buf, final_buf, client->socket);
+            else
+                printf("Invalid pid (%u)\n", (unsigned) send_mem->pid);
+            send_mem->packet_ready = PACKET_READY_FALSE;
+        }
+        else
+            sleep(PACKET_READY_WAIT_TIME);
+    }
+
+    return NULL;
+}
 
 void send_server_packet(uint32_t pn, int32_t psize, server_send_memory *send_mem, char *buf, char *final_buf, int socket) {
     send_packet(pn, send_mem->pid, psize, send_mem->pdata, send_mem->datalen, 
@@ -772,7 +795,7 @@ void send_game_state(client *client) {
     send_mem->packet_ready = PACKET_READY_TRUE;
 }
 
-void send_game_end(client *client) {
+void send_game_end(int team_score, client *client) {
     char i;
     size_t offset;
     game_state *gs;
@@ -786,8 +809,8 @@ void send_game_end(client *client) {
     send_mem->pid = PACKET_GAME_END_ID;
 
     offset = insert_char(gs->status, send_mem->pdata, sizeof(send_mem->pdata), 0);
-    offset += insert_int32_t_as_big_endian(find_team_score(client), send_mem->pdata, sizeof(send_mem->pdata), offset);
-    offset += insert_int32_t_as_big_endian(gs->end_time - gs->start_time, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    offset += insert_int32_t_as_big_endian(team_score, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    offset += insert_int32_t_as_big_endian((gs->end_time - gs->start_time) / CLOCKS_PER_SEC, send_mem->pdata, sizeof(send_mem->pdata), offset);
 
     offset += insert_char(gs->team_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
     for (i = 0; i < gs->team_count; i++) {
@@ -807,27 +830,30 @@ void send_game_end(client *client) {
     send_mem->packet_ready = PACKET_READY_TRUE;
 }
 
+void send_return_to_menu(client *client) {
+    server_send_memory *send_mem;
+
+    send_mem = &client->send_mem;
+    while (send_mem->packet_ready == PACKET_READY_TRUE)
+        sleep(PACKET_READY_WAIT_TIME);
+
+    send_mem->pid = PACKET_RETURN_TO_MENU_ID;
+    send_mem->datalen = PACKET_RETURN_TO_MENU_DATA_SIZE;
+    send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+
 /* helpers */
-game_state *find_free_game_state(server_shared_memory *sh_mem) {
+game_state *get_free_game_state(server_shared_memory *sh_mem) {
     char i;
     game_state *gs;
 
     for (i = 0; i < MAX_GAME_STATES; i++) {
         gs = &sh_mem->game_states[i];
-        if (gs->status == GAME_STATE_STATUS_FREE)
+        if (gs->status == GAME_STATE_STATUS_FREE) {
+            gs->status = GAME_STATE_STATUS_TAKEN;
             return gs;
-    }
-    return NULL;
-}
-
-client *find_client_by_id(char id, server_shared_memory *sh_mem) {
-    char i;
-    client *c;
-
-    for (i = 0; i < MAX_CLIENTS; i++) {
-        c = &sh_mem->clients[i];
-        if (c->id == id)
-            return c;
+        }
     }
     return NULL;
 }
@@ -839,34 +865,15 @@ void add_client_to_lobby(client *client, lobby *lobby) {
         sleep(1/50.0);
 
     for (i = 0; i < lobby->max_clients; i++) {
-        if (lobby->clients[i] == NULL)
+        if (lobby->clients[i] == NULL) {
+            lobby->client_count += 1;
             lobby->clients[i] = client;
+            break;
+        }
     }
     client->state = CLIENT_STATE_LOBBY;
 }
 
-int find_team_score(client *client) {
-    char i, team_id;
-    game_state *gs;
-
-    gs = client->game_state;
-    if (gs == NULL)
-        return -1;
-
-    team_id = -1;
-    for (i = 0; i < gs->player_count; i++) {
-        if (gs->players[i].id == client->id)
-            team_id = gs->players[i].team_id;
-    }
-    if (team_id == -1)
-        return -1;
-
-    for (i = 0; i < gs->team_count; i++) {
-        if (gs->teams[i].id == team_id)
-            return gs->teams[i].score;
-    }
-    return -1;
-}
 
 int is_alphanum(char *data, size_t datalen) {
     size_t i;
@@ -880,32 +887,60 @@ int is_alphanum(char *data, size_t datalen) {
 
 
 /* debug */
-void print_client_data(client *client) {
-    printf("ID: %d\n", client->id);
-    printf("SOCKET: %d\n", client->socket);
-    printf("NAME %s\n", client->name);
-    printf("STATE: %d\n", client->state);
-    // TODO: print lobby
-    // TODO: print game_state
-    // print_recv_memory(&(cd->recv_mem_cfg));
-    // print_send_memory(&(cd->send_mem_cfg));
+void print_client(client *client) {
+    printf("id: %d\n", client->id);
+    printf("socket: %d\n", client->socket);
+    printf("name %s\n", client->name);
+    printf("state: %d\n", client->state);
+}
+
+void print_lobby(lobby *lobby) {
+    char i;
+    client *c;
+
+    printf("last_update: %lu\n", lobby->last_update);
+    printf("client_count: %d\n", lobby->client_count);
+    printf("max_clients: %d\n", lobby->max_clients);
+    printf("client_ids: ");
+    for (i = 0; i < lobby->max_clients; i++) {
+        c = lobby->clients[i];
+        if (c == NULL)
+            printf("NULL ");
+        else
+            printf("%d ", c->id);
+    }
+    putchar('\n');
 }
 
 void print_shared_memory(server_shared_memory* sh_mem) {
-    // char id;
-    // client_data cd;
+    char i;
 
-    // /* print client count */
-    // printf("Client count: ");
-    // print_bytes(sh_mem->client_count, 1);
-    // putchar('\n');
+    /* print client count */
+    printf("CLIENT COUNT: %u\n", sh_mem->client_count);
 
-    // /* print client datas */
-    // for (id = 0; id < MAX_CLIENTS; id++) {
-    //     print_client_data(&cd);
-    //     putchar('\n');
-    // }
-    // putchar('\n');
+    /* print clients */
+    putchar('\n');
+    printf("====== CLIENTS ======\n");
+    for (i = 0; i < sh_mem->client_count; i++) {
+        print_client(&sh_mem->clients[i]);
+        putchar ('\n');
+    }
 
-    /* TODO: print game states */
+    /* print lobbys */ 
+    putchar ('\n');
+    printf("====== LOBBY_1V1 ======\n");
+    print_lobby(&sh_mem->lobby_1v1);
+
+    putchar ('\n');
+    printf("====== LOBBY_2V2 ======\n");
+    print_lobby(&sh_mem->lobby_2v2);
+
+    /* print game_states */
+    putchar ('\n');
+    putchar ('\n');
+    printf("====== GAME_STATES ======\n");
+    for (i = 0; i < MAX_GAME_STATES; i++) {
+        print_game_state(&sh_mem->game_states[i]);
+        printf("----------------------------------------------\n");
+    }
 }

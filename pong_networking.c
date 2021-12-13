@@ -2,6 +2,7 @@
 #include "args.h"
 
 #include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -204,8 +205,7 @@ void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size
     /* add separator */
     offset += insert_separator(final_buf, final_buf_size, offset);
     // printf("after separator: \n");
-    // printf("Packet sent (pid=%d): ", *(send_mem_cfg->pid));
-    // print_bytes(final_packet, offset);
+    // print_bytes(final_buf, offset);
 
     /* send packet to socket */ 
     send(socket, final_buf, offset, 0);
@@ -338,7 +338,7 @@ char verify_packet(uint32_t exp_pn, char *packet, int32_t decoded_size) {
     int32_t exp_psize = *((int32_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE));
     char checksum = packet[decoded_size - PACKET_CHECKSUM_SIZE];
 
-    return (pn >= exp_pn) &&
+    return ((pn >= exp_pn) || ((exp_pn >= UINT32_MAX - 50) && (pn >= 0))) &&
             (psize == exp_psize) &&
             (checksum == xor_checksum(packet, PACKET_HEADER_SIZE + psize));
 }

@@ -43,6 +43,7 @@ int main(int argc, char **argv) {
         return -1;
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
+    /* FIRST TEST */
     send_join("Raivis", &sh_mem->send_mem);
 
     /* process already validated incoming packets */

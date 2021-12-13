@@ -59,12 +59,14 @@ void *receive_server_packets(void *arg) {
                         *psize = big_endian_to_host_int32_t(*psize);
 
                         // printstr("packet received");
-                        // print_bytes(packet, i);
+                        // print_bytes(packet_buf, i);
 
                         /* verify packet */
-                        *packet_ready = verify_packet(recv_pn, packet_buf, i);
+                        if (verify_packet(recv_pn, packet_buf, i) != 0) {
+                            *packet_ready = PACKET_READY_TRUE;
+                            recv_pn = *pn + 1;
+                        }
 
-                        recv_pn++;
                         c = prevc = i = sep_count = 0;
                         continue;
                     }
@@ -126,6 +128,9 @@ void *send_client_packets(void *arg) {
                 case PACKET_CHECK_STATUS_ID:
                     send_client_packet(send_pn++, PACKET_CHECK_STATUS_DATA_SIZE, send_mem, buf, final_buf, socket);
                     break;
+                case PACKET_GAME_TYPE_ID:
+                    send_client_packet(send_pn++, PACKET_GAME_TYPE_DATA_SIZE, send_mem, buf, final_buf, socket);
+                    break;
                 default:
                     printf("Invalid pid (%u)\n", (unsigned) send_mem->pid);
             }
@@ -143,12 +148,12 @@ void process_server_packets(client_shared_memory *sh_mem) {
     client_recv_memory *recv_mem = &sh_mem->recv_mem;
     client_send_memory *send_mem = &sh_mem->send_mem;
     char *packet_ready = &recv_mem->packet_ready;
-    unsigned char pid = *((unsigned char *) recv_mem->packet_buf + PACKET_NUMBER_SIZE);
+    unsigned char *pid = (unsigned char *) (recv_mem->packet_buf + PACKET_NUMBER_SIZE);
     char *pdata = recv_mem->packet_buf + PACKET_HEADER_SIZE;
 
     while(1) {
         if (*packet_ready == PACKET_READY_TRUE) {
-            switch (pid) {
+            switch (*pid) {
                 case PACKET_ACCEPT_ID:
                     process_accept(pdata, send_mem);
                     break;
@@ -167,8 +172,11 @@ void process_server_packets(client_shared_memory *sh_mem) {
                 case PACKET_GAME_END_ID:
                     process_game_end(pdata, send_mem);
                     break;
+                case PACKET_RETURN_TO_MENU_ID:
+                    process_return_to_menu(send_mem);
+                    break;
                 default:
-                    printf("Invalid pid (%u)\n", (unsigned) pid);
+                    printf("Invalid pid (%u)\n", (unsigned) *pid);
             }
             *packet_ready = PACKET_READY_FALSE;
         }
@@ -181,6 +189,9 @@ void process_accept(char *data, client_send_memory *send_mem) {
     char status = *data;
     printf("RECEIVED ACCEPT, status=%d\n", status);
 
+    // test
+    send_game_type(GAME_TYPE_1V1, send_mem);
+
     // process
 }
 
@@ -191,26 +202,35 @@ void process_message_from_server(char *data, client_send_memory *send_mem) {
     char source_id = *data_ptr;
     data_ptr += 1;
     char *message = data_ptr;
-    printf("RECEIVED MESSAGE, type=%d, source_id=%d, message=%s\n", type, source_id, message);
+    printf("Received MESSAGE, type=%d, source_id=%d, message=%s\n", type, source_id, message);
     
     // process
 }
 
 void process_lobby(char *data, client_send_memory *send_mem) {
-    // process
+    printf("Received LOBBY\n");
+    // draw lobby
     // drawLobby(data, ...);
 }
 
 void process_game_ready(char *data, client_send_memory *send_mem) {
-    // process
+    printf("Received GAME_READY\n");
+    // initialize game screen
 }
 
 void process_game_state(char *data, client_send_memory *send_mem) {
-    // process
+    printf("Received GAME_STATE\n");
+    // draw game state
 }
 
 void process_game_end(char *data, client_send_memory *send_mem) {
-    // process
+    printf("Received GAME_END\n");
+    // draw statistics
+}
+
+void process_return_to_menu(client_send_memory *send_mem) {
+    printf("Received RETURN_TO_MENU\n");
+    // draw main menu
 }
 
 
