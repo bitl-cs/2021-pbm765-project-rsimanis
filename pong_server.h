@@ -6,9 +6,16 @@
 
 #include <time.h>
 
-#define MAX_GAME_STATES                 (MAX_CLIENTS / 2)
-#define CLIENT_ID_TAKEN_FALSE           -1
-#define LOBBYLOOP_UPDATE_INTERVAL       1/70.0      /* in seconds */
+#define MAX_GAME_STATES                 (MAX_CLIENTS / 2)   /* max number of game states at any moment (this number is achieved if maximum number of clients has connected and everyone plays a 1v1 match) */
+#define CLIENT_ID_TAKEN_FALSE           -1                  /* when client memory is not occupied, its id is set to this value */
+#define LOBBYLOOP_UPDATE_INTERVAL       1/70.0              /* time interval (in seconds) between two lobby updates */
+
+#define CLIENT_STATE_JOIN               0           /* player sees the join screen */
+#define CLIENT_STATE_MENU               1           /* player sees the main menu (1v1 and 2v2 buttons) */
+#define CLIENT_STATE_LOBBY              2           /* player sees his/her lobby */
+#define CLIENT_STATE_LOADING            3           /* player sees the game loading screen before match */
+#define CLIENT_STATE_GAME               4           /* player sees the game - he is playing pong (hopefully) */ 
+#define CLIENT_STATE_STATISTICS         5           /* player sees the statistics screen (or error if game finished erroneously*/
 
 typedef struct _server_recv_memory {
     char packet_ready;
@@ -26,9 +33,9 @@ typedef struct _client client;  /* forward declaration */
 struct _client;
 typedef struct _lobby {
     clock_t last_update;
-    char max_players;
-    char player_count;
-    client *players[MAX_PLAYER_COUNT];
+    char max_clients;
+    char client_count;
+    client *clients[MAX_PLAYER_COUNT];
 } lobby;
 
 typedef struct _client {
@@ -61,7 +68,15 @@ typedef struct _server_recv_send_thread_args {
 server_shared_memory *get_server_shared_memory(void);
 void init_server(server_shared_memory *sh_mem);
 void start_network(char *port, server_shared_memory *sh_mem);
-void init_lobby(lobby *lobby, int max_players);
+void init_lobby(lobby *lobby, int max_clients);
+
+void init_teams(game_state *gs);
+void init_back_players(game_state *gs, lobby *lobby);
+void init_front_players(game_state *gs, lobby *lobby);
+void init_balls(game_state *gs);
+void init_power_ups(game_state *gs);
+void init_game_1v1(game_state *gs, lobby *lobby);
+void init_game_2v2(game_state *gs, lobby *lobby);
 
 /* game */
 void reset_lobby(lobby *lobby);
