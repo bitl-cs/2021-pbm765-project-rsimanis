@@ -1,5 +1,6 @@
 #include "pong_client.h"
 #include "pong_networking.h"
+#include "graphics.h"
 
 #include <stdio.h>
 #include <pthread.h>
@@ -44,7 +45,8 @@ int main(int argc, char **argv) {
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
     /* FIRST TEST */
-    send_join("Raivis", &sh_mem->send_mem);
+    // send_join("Raivis", &sh_mem->send_mem);
+    init_screen(argc, argv);
 
     /* process already validated incoming packets */
     process_server_packets(sh_mem);

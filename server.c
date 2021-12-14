@@ -18,10 +18,10 @@ int main(int argc, char **argv) {
     if (pid == 0)
         start_network(port, sh_mem);
     else {
-        pid = fork();
-        if (pid == 0)
-            lobbyloop(sh_mem);
-        else
+        // pid = fork();
+        // if (pid == 0)
+        //     lobbyloop(sh_mem);
+        // else
             gameloop(sh_mem);
 
     }

@@ -5,15 +5,17 @@
 #include <time.h>
 
 /* gameloop */
-#define GAMELOOP_UPDATE_INTERVAL            1/70.0      /* time interval (in seconds) between two game state updates */
+#define GAME_READY_UPDATE_INTERVAL          1/30.0
+#define GAME_STATE_UPDATE_INTERVAL          1/70.0      /* time interval (in seconds) between two game state updates */
 
 /* general */
 #define MAX_NAME_SIZE                       20          /* max client username size (19 chars + 1 null byte) */
 #define MAX_MESSAGE_SIZE                    256         /* max message size that can be sent (255 chars + 1 null byte) */
 
-#define GAME_STATE_STATUS_FREE              -3          /* game state memory is not occupied */
-#define GAME_STATE_STATUS_TAKEN             -2          /* game state memory is occupied */
-#define GAME_STATE_STATUS_IN_PROGRESS       -1          /* game state memory is occupied and the game is happening right now */
+#define GAME_STATE_STATUS_FREE              -4          /* game state memory is not occupied */
+#define GAME_STATE_STATUS_TAKEN             -3          /* game state memory is occupied */
+#define GAME_STATE_STATUS_IN_PROGRESS       -2          /* game state memory is occupied and the game is happening right now */
+#define GAME_STATE_STATUS_LOADING           -1          /* game state memory is occupied and clients are currently loading the game screen */
 #define GAME_STATE_STATUS_ERROR             0           /* game state memory is occupied and the game has finished with an error */
 #define GAME_STATE_STATUS_SUCCESS           1           /* game state memory is occupied and the game has finished without an error */
 
@@ -186,9 +188,11 @@ void init_power_up(power_up *power_up, float x, float y, float width, float heig
 void start_game(game_state *gs);
 
 /* gameloop */
+int should_update_game_state(game_state *gs);
 void update_game_state(game_state *gs);
 void restart_round(game_state *gs);
 void end_game(game_state *gs);
+int is_everyone_ready(game_state *gs);
 
 /* helpers */
 // player *find_player_by_id(char player_id, game_state *gs);

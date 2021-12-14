@@ -12,12 +12,16 @@ CFILES_SERVER = $(CFILES_BOTH) pong_server.c $(SERVER_MAIN)
 CFILES_CLIENT = $(CFILES_BOTH) pong_client.c graphics.c $(CLIENT_MAIN)
 
 all: $(SERVER_EXE) $(CLIENT_EXE)
+graphics: graphics.exe
 
 $(SERVER_EXE): $(CFILES_SERVER)
 	@gcc $(CFLAGS) $(LDFLAGS) -o $(SERVER_EXE) $(CFILES_SERVER)
 
 $(CLIENT_EXE): $(CFILES_CLIENT)
 	@gcc $(CFLAGS) $(LDFLAGS) -o $(CLIENT_EXE) $(CFILES_CLIENT)
+
+graphics.exe: graphics.c
+	@gcc $(CFLAGS) -lGL -lGLU -lglut -o graphics.exe graphics.c
 
 .PHONY: clean
 

@@ -133,8 +133,7 @@ void draw_game_type_view(){
     draw_rectangle(two_v_two_x, two_v_two_y, game_type_button_width, game_type_button_height, color);
 }
 
-// int main(int argc, char** argv){
-    
+// void init_screen(int argc, char **argv) {
 //     glutInit(&argc, argv);
 //     glutInitWindowPosition(250, 200);
 //     glutInitWindowSize(WINDOW_WIDHT, WINDOW_HEIGHT);
@@ -143,9 +142,20 @@ void draw_game_type_view(){
 
 //     draw_initial_screen();
 //     glutMainLoop();
-
-//     return 0;
 // }
+
+int main(int argc, char** argv){
+    
+    glutInit(&argc, argv);
+    glutInitWindowPosition(250, 200);
+    glutInitWindowSize(WINDOW_WIDHT, WINDOW_HEIGHT);
+    glutInitDisplayMode(GLUT_RGB | GLUT_SINGLE);
+    glutCreateWindow("Test OpenGL program");
+    glutDisplayFunc(draw_initial_screen);
+    glutMainLoop();
+
+    return 0;
+}
 
 // void render_characters(){
 //     FT_Library ft;

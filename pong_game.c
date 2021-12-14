@@ -58,98 +58,94 @@ void init_window(game_state *gs) {
 }
 
 void start_game(game_state *gs) {
-    clock_t now;
-
-    now = clock();
-    gs->start_time = now;
-    gs->last_update = now;
     gs->status = GAME_STATE_STATUS_IN_PROGRESS;
 }
 
 /* gameloop */
+int should_update_game_state(game_state *gs) {
+    clock_t now;
+    double diff;
+
+    now = clock();
+    diff = (double) (now - gs->last_update) / CLOCKS_PER_SEC;
+    return diff >= GAME_STATE_UPDATE_INTERVAL;
+}
+
 void update_game_state(game_state *gs) {
     char i, j;
-    double diff;
     float new_pos_x, new_pos_y;
-    clock_t now;
     team *t;
     player *p;
     ball *b;
     power_up *pu;
 
-    now = clock();
-    diff = (double) (now - gs->last_update) / CLOCKS_PER_SEC;
-    if (diff >= GAMELOOP_UPDATE_INTERVAL) {
-        gs->last_update = now;
+    /* iterate over all players */
+    for (i = 0; i < gs->player_count; i++) {
+        p = &gs->players[i];
 
-        /* iterate over all players */
-        for (i = 0; i < gs->player_count; i++) {
-            p = &gs->players[i];
+        /* update velocity */
+        update_velocity_component(&p->v.x, &p->a.x, PLAYER_MAX_VELOCITY_X_MOD);
+        update_velocity_component(&p->v.y, &p->a.y, PLAYER_MAX_VELOCITY_Y_MOD);
 
-            /* update velocity */
-            update_velocity_component(&p->v.x, &p->a.x, PLAYER_MAX_VELOCITY_X_MOD);
-            update_velocity_component(&p->v.y, &p->a.y, PLAYER_MAX_VELOCITY_Y_MOD);
-
-            /* update positions */            
-            p->pos.x += p->v.x;
-            p->pos.y += p->v.y;
-
-        }
-
-        /* itereate over all balls */
-        for (i = 0; i < gs->ball_count; i++) {
-            b = &gs->balls[i];  
-
-            /* update positions */            
-            update_velocity_component(&b->v.x, &b->a.x, BALL_MAX_VELOCITY_X_MOD);
-            update_velocity_component(&b->v.y, &b->a.y, BALL_MAX_VELOCITY_Y_MOD);
-
-            /* update positions */            
-            b->pos.x += b->v.x;
-            b->pos.y += b->v.y;
-
-            /* check for colision with goal lines */
-            // iterate over all teams
-                // if colliding with line
-                    // update player score, team score, reset game board
-            for (j = 0; j < gs->team_count; j++) {
-                t = &gs->teams[j];
-                // assuming that goal lines are ALWAYS vertical
-                if (mod_f(b->pos.x - t->goal1.x) < BALL_COLLISION_DISTANCE) {
-                    gs->players[b->last_touched_id].score += 1;
-                    gs->teams[gs->players[b->last_touched_id].team_id].score += 1;
-                    if (is_winning_team(&gs->teams[gs->players[b->last_touched_id].team_id], gs))
-                        end_game(gs);
-                    else
-                        restart_round(gs);
-                }
-            }
-
-            /* check for collision with players */
-            for (j = 0; j < gs->player_count; j++) {
-                p = &gs->players[j];
-
-                if ((b->pos.y >= p->pos.y) && (b->pos.y <= p->pos.y + p->height) && 
-                    (b->pos.x + b->radius >= p->pos.x) && (b->pos.x - b->radius <= p->pos.x + p->width)) {
-                    reverse_vec2f(&b->v);
-                    reverse_vec2f(&b->a);
-                }
-            }
-
-            /* check for collision with walls (top and bottom) */
-            if ((b->pos.y >= WINDOW_HEIGHT - b->radius) || (b->pos.y <= b->radius)) {
-                b->a.y = -b->a.y;
-                b->v.y = -b->v.y;
-            }
-
-            /* check for collision with power-ups */
-            // iterate over all power-ups 
-                // if ball is inside power-up
-                    // apply powerup to ball/player based on its type, and remove it from the map
-        }
-        
+        /* update positions */            
+        p->pos.x += p->v.x;
+        p->pos.y += p->v.y;
 
     }
+
+    /* itereate over all balls */
+    for (i = 0; i < gs->ball_count; i++) {
+        b = &gs->balls[i];  
+
+        /* update positions */            
+        update_velocity_component(&b->v.x, &b->a.x, BALL_MAX_VELOCITY_X_MOD);
+        update_velocity_component(&b->v.y, &b->a.y, BALL_MAX_VELOCITY_Y_MOD);
+
+        /* update positions */            
+        b->pos.x += b->v.x;
+        b->pos.y += b->v.y;
+
+        /* check for colision with goal lines */
+        // iterate over all teams
+            // if colliding with line
+                // update player score, team score, reset game board
+        for (j = 0; j < gs->team_count; j++) {
+            t = &gs->teams[j];
+            // assuming that goal lines are ALWAYS vertical
+            if (mod_f(b->pos.x - t->goal1.x) < BALL_COLLISION_DISTANCE) {
+                gs->players[b->last_touched_id].score += 1;
+                gs->teams[gs->players[b->last_touched_id].team_id].score += 1;
+                if (is_winning_team(&gs->teams[gs->players[b->last_touched_id].team_id], gs))
+                    end_game(gs);
+                else
+                    restart_round(gs);
+            }
+        }
+
+        /* check for collision with players */
+        for (j = 0; j < gs->player_count; j++) {
+            p = &gs->players[j];
+
+            if ((b->pos.y >= p->pos.y) && (b->pos.y <= p->pos.y + p->height) && 
+                (b->pos.x + b->radius >= p->pos.x) && (b->pos.x - b->radius <= p->pos.x + p->width)) {
+                reverse_vec2f(&b->v);
+                reverse_vec2f(&b->a);
+            }
+        }
+
+        /* check for collision with walls (top and bottom) */
+        if ((b->pos.y >= WINDOW_HEIGHT - b->radius) || (b->pos.y <= b->radius)) {
+            b->a.y = -b->a.y;
+            b->v.y = -b->v.y;
+        }
+
+        /* check for collision with power-ups */
+        // iterate over all power-ups 
+            // if ball is inside power-up
+                // apply powerup to ball/player based on its type, and remove it from the map
+    }
+
+    gs->last_update = clock();
 }
 
 void end_game(game_state *gs) {
@@ -270,6 +266,18 @@ void reset_power_ups(game_state *gs) {
         pu = &gs->power_ups[i];
         // reset
     }
+}
+
+int is_everyone_ready(game_state *gs) {
+    char i;
+    player *p;
+
+    for (i = 0; i < gs->player_count; i++) {
+        p = &gs->players[i];
+        if (p->ready == PLAYER_READY_FALSE)
+            return 0;
+    }
+    return 1;
 }
 
 void print_team(team *team) {

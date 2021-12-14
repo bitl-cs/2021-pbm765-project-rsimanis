@@ -2,6 +2,7 @@
 #include "pong_game.h"
 #include "pong_networking.h"
 
+#include <stddef.h>
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -86,47 +87,57 @@ void init_teams(game_state *gs) {
 }
 
 void init_back_players(game_state *gs, lobby *lobby) {
-    player *left_player, *right_player;
+    player *p;
+    client *c;
 
     /* initialize left player */
-    left_player = &gs->players[LEFT_BACK_PLAYER_ID];
-    init_player(left_player, LEFT_BACK_PLAYER_ID, lobby->clients[LEFT_BACK_PLAYER_ID]->id, LEFT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[LEFT_BACK_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+    p = &gs->players[LEFT_BACK_PLAYER_ID];
+    c = lobby->clients[LEFT_BACK_PLAYER_ID];
+    init_player(p, LEFT_BACK_PLAYER_ID, c->id, LEFT_TEAM_ID,
+                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
                 LEFT_BACK_PLAYER_INITIAL_X, LEFT_BACK_PLAYER_INITIAL_Y, 
                 PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
                 PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
                 PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    c->player = p;
 
     /* initialize right player */
-    right_player = &gs->players[RIGHT_BACK_PLAYER_ID];
-    init_player(right_player, RIGHT_BACK_PLAYER_ID, lobby->clients[RIGHT_BACK_PLAYER_ID]->id, RIGHT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[RIGHT_BACK_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+    p = &gs->players[RIGHT_BACK_PLAYER_ID];
+    c = lobby->clients[RIGHT_BACK_PLAYER_ID];
+    init_player(p, RIGHT_BACK_PLAYER_ID, c->id, RIGHT_TEAM_ID,
+                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
                 RIGHT_BACK_PLAYER_INITIAL_X, RIGHT_BACK_PLAYER_INITIAL_Y,
                 PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
                 PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
                 PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    c->player = p;
 }
 
 void init_front_players(game_state *gs, lobby *lobby) {
-    player *left_player, *right_player;
+    player *p;
+    client *c;
 
     /* initialize left player */
-    left_player = &gs->players[LEFT_FRONT_PLAYER_ID];
-    init_player(left_player, LEFT_FRONT_PLAYER_ID, lobby->clients[LEFT_FRONT_PLAYER_ID]->id, LEFT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[LEFT_FRONT_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+    p = &gs->players[LEFT_FRONT_PLAYER_ID];
+    c = lobby->clients[LEFT_FRONT_PLAYER_ID];
+    init_player(p, LEFT_FRONT_PLAYER_ID, c->id, LEFT_TEAM_ID,
+                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
                 LEFT_FRONT_PLAYER_INITIAL_X, LEFT_FRONT_PLAYER_INITIAL_Y, 
                 PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
                 PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
                 PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    c->player = p;
 
     /* initialize right player */
-    right_player = &gs->players[RIGHT_FRONT_PLAYER_ID];
-    init_player(right_player, RIGHT_FRONT_PLAYER_ID, lobby->clients[RIGHT_FRONT_PLAYER_ID]->id, RIGHT_TEAM_ID,
-                PLAYER_READY_FALSE, lobby->clients[RIGHT_FRONT_PLAYER_ID]->name, PLAYER_INITIAL_SCORE,  
+    p = &gs->players[RIGHT_FRONT_PLAYER_ID];
+    c = lobby->clients[RIGHT_FRONT_PLAYER_ID];
+    init_player(p, RIGHT_FRONT_PLAYER_ID, c->id, RIGHT_TEAM_ID,
+                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
                 RIGHT_FRONT_PLAYER_INITIAL_X, RIGHT_FRONT_PLAYER_INITIAL_Y, 
                 PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
                 PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
                 PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    c->player = p;
 }
 
 void init_balls(game_state *gs) {
@@ -158,11 +169,13 @@ void init_game_1v1(game_state *gs, lobby *lobby) {
     gs->game_type = GAME_TYPE_1V1;
     init_window(gs);
     init_teams(gs);
+    gs->player_count = 2;
     init_back_players(gs, lobby); /* in 1v1 game mode, only back players are playing */
     init_balls(gs);
     init_power_ups(gs);
 
-    start_game(gs);
+    gs->last_update = clock();
+    gs->status = GAME_STATE_STATUS_LOADING;
 }
 
 void init_game_2v2(game_state *gs, lobby *lobby) {
@@ -178,12 +191,14 @@ void init_game_2v2(game_state *gs, lobby *lobby) {
     gs->game_type = GAME_TYPE_2V2;
     init_window(gs);
     init_teams(gs);
+    gs->player_count = 4;
     init_back_players(gs, lobby);
     init_front_players(gs, lobby);
     init_balls(gs);
     init_power_ups(gs);
 
-    start_game(gs);
+    gs->last_update = clock();
+    gs->status = GAME_STATE_STATUS_LOADING;
 }
 
 /* game */
@@ -199,33 +214,50 @@ void update_lobby(lobby *lobby, server_shared_memory *sh_mem) {
     double diff;        /* time difference in seconds */
     game_state *gs;
     clock_t now;
+    client *c;
+
+    // if (lobby == NULL) {
+    //     printf("update_lobby(lobby, sh_mem): lobby = NULL\n");
+    //     return;
+    // }
+    // if (sh_mem == NULL) {
+    //     printf("update_lobby(lobby, sh_mem): sh_mem = NULL\n");
+    //     return;
+    // }
 
     now = clock();
     diff = (double) (now - lobby->last_update) / CLOCKS_PER_SEC;
     if (diff >= LOBBYLOOP_UPDATE_INTERVAL) {
         lobby->last_update = now;
         if (lobby->client_count == lobby->max_clients) {
-            /* start game */
+            /* find free game state */
             gs = get_free_game_state(sh_mem);
             if (gs == NULL) {
                 printf("Currently no free game state available (should not happen)\n");
                 return;
             }
+
+            /* update player info*/
+            for (i = 0; i < lobby->client_count; i++) {
+                c = lobby->clients[i];
+                c->game_state = gs;
+                c->state = CLIENT_STATE_LOADING;
+            }
+
+            /* start game */
             if (lobby->max_clients == GAME_1V1_PLAYER_COUNT)
                 init_game_1v1(gs, lobby);
             else if (lobby->max_clients == GAME_2V2_PLAYER_COUNT)
                 init_game_2v2(gs, lobby);
 
-            /* update player states */
-            for (i = 0; i < lobby->client_count; i++)
-                lobby->clients[i]->state = CLIENT_STATE_LOADING;
-
             /* reset lobby */
             reset_lobby(lobby);
         }
         else {
-            for (i = 0; i < lobby->client_count; i++)
+            /* waiting for players => send current lobby state to client */
+            for (i = 0; i < lobby->client_count; i++) {
                 send_lobby(lobby->clients[i]);
+            }
         }
     }
 }
@@ -238,22 +270,68 @@ void gameloop(server_shared_memory *sh_mem) {
 
     printf("Starting game loop! (It will run forever - use Ctrl+C)\n");
     while (1) {
+        update_lobby(&sh_mem->lobby_1v1, sh_mem);
+        update_lobby(&sh_mem->lobby_2v2, sh_mem);
         for (i = 0; i < MAX_GAME_STATES; i++) {
             gs = &sh_mem->game_states[i];
-            if (gs->status == GAME_STATE_STATUS_IN_PROGRESS)
-                update_game_state(gs);
-            else if (gs->status == GAME_STATE_STATUS_SUCCESS || gs->status == GAME_STATE_STATUS_ERROR) {
-                for (j = 0; j < gs->player_count; j++) {
-                    p = &gs->players[j];
-                    c = &sh_mem->clients[p->client_id];
-                    c->state = CLIENT_STATE_STATISTICS;
-                    send_game_end(gs->teams[p->team_id].score ,c);
-                    if (gs->status == GAME_STATE_STATUS_ERROR)
-                        send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, "Something went wrong", c);
+            if (gs->status == GAME_STATE_STATUS_LOADING) {
+                if (is_everyone_ready(gs))
+                    start_game(gs);
+                else
+                    send_game_ready_to_all_players(gs, sh_mem);
+            }
+            else if (gs->status == GAME_STATE_STATUS_IN_PROGRESS) {
+                if (should_update_game_state(gs)) {
+                    update_game_state(gs);
+                    send_game_state_to_all_players(gs, sh_mem);
                 }
+            }
+            else if (gs->status == GAME_STATE_STATUS_SUCCESS || gs->status == GAME_STATE_STATUS_ERROR) {
+                end_game_for_all_players(gs, sh_mem);
                 gs->status = GAME_STATE_STATUS_FREE;
             }
         }
+    }
+}
+
+void send_game_ready_to_all_players(game_state *gs, server_shared_memory *sh_mem) {
+    char i;
+    double diff;
+    clock_t now;
+
+    now = clock();
+    diff = (double) (now - gs->last_update) / CLOCKS_PER_SEC;
+    if (diff < GAME_READY_UPDATE_INTERVAL) {
+        gs->last_update = now;
+        for (i = 0; i < gs->player_count; i++)
+            send_game_ready(&sh_mem->clients[gs->players[i].client_id]);
+    }
+}
+
+void send_game_state_to_all_players(game_state *gs, server_shared_memory *sh_mem) {
+    char i;
+    player *p;
+    client *c;
+
+    for (i = 0; i < gs->player_count; i++) {
+        p = &gs->players[i];
+        c = &sh_mem->clients[p->client_id];
+        send_game_state(c);
+    }
+}
+
+void end_game_for_all_players(game_state *gs, server_shared_memory *sh_mem) {
+    char i;
+    player *p;
+    client *c;
+
+    for (i = 0; i < gs->player_count; i++) {
+        p = &gs->players[i];
+        c = &sh_mem->clients[p->client_id];
+        c->state = CLIENT_STATE_STATISTICS;
+        send_game_end(gs->teams[p->team_id].score, c);
+        if (gs->status == GAME_STATE_STATUS_ERROR)
+            send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, "Something went wrong", c);
     }
 }
 
@@ -294,7 +372,7 @@ void accept_clients(int server_socket, server_shared_memory *sh_mem) {
             else {
                 /* orphaning */
                 wait(NULL); /* blocks parent process until any of its children has finished */
-                printf("Successfully orphaned client %d\n", new_client->id);
+                // printf("Successfully orphaned client %d\n", new_client->id);
                 exit(0);
             }
         }
@@ -427,13 +505,13 @@ void *receive_client_packets(void *arg) {
             prevc = c;
         }
         else if (len == 0) {
-            printf("Client disconnected (client_id=%d, socket=%d)\n", client->id, client->socket);
+            printf("Client disconnected (id=%d, socket=%d)\n", client->id, client->socket);
             remove_client(client, sh_mem);
             exit(0);
         }
         else {
             printf("Recv() error (errno=%d)\n", errno);
-            printf("Removing client... (client_id=%d, socket=%d)\n", client->id, client->socket);
+            printf("Removing client... (id=%d, socket=%d)\n", client->id, client->socket);
             remove_client(client, sh_mem);
             exit(-1);
         }
@@ -543,10 +621,8 @@ void process_message_from_client(char *data, client *client, server_shared_memor
 void process_player_ready(client *client, server_shared_memory *sh_mem) {
     printf("Received PLAYER_READY from client (id=%d)\n", client->id);
     if (client->state == CLIENT_STATE_LOADING) {
-        if (client->player == NULL) {
-
-        }
-        client->player->ready = PLAYER_READY_TRUE;
+        if (client->player != NULL)
+            client->player->ready = PLAYER_READY_TRUE;
     }
 }
 
@@ -796,7 +872,7 @@ void send_game_state(client *client) {
 }
 
 void send_game_end(int team_score, client *client) {
-    char i;
+    char i, status;
     size_t offset;
     game_state *gs;
     server_send_memory *send_mem;
@@ -808,22 +884,25 @@ void send_game_end(int team_score, client *client) {
 
     send_mem->pid = PACKET_GAME_END_ID;
 
+    status = gs->status;
     offset = insert_char(gs->status, send_mem->pdata, sizeof(send_mem->pdata), 0);
-    offset += insert_int32_t_as_big_endian(team_score, send_mem->pdata, sizeof(send_mem->pdata), offset);
-    offset += insert_int32_t_as_big_endian((gs->end_time - gs->start_time) / CLOCKS_PER_SEC, send_mem->pdata, sizeof(send_mem->pdata), offset);
+    if (status != GAME_STATE_STATUS_ERROR) {
+        offset += insert_int32_t_as_big_endian(team_score, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_int32_t_as_big_endian((gs->end_time - gs->start_time) / CLOCKS_PER_SEC, send_mem->pdata, sizeof(send_mem->pdata), offset);
 
-    offset += insert_char(gs->team_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
-    for (i = 0; i < gs->team_count; i++) {
-        offset += insert_char(gs->teams[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
-        offset += insert_int32_t_as_big_endian(gs->teams[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
-    }
+        offset += insert_char(gs->team_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        for (i = 0; i < gs->team_count; i++) {
+            offset += insert_char(gs->teams[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+            offset += insert_int32_t_as_big_endian(gs->teams[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        }
 
-    offset += insert_char(gs->player_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
-    for (i = 0; i < gs->player_count; i++) {
-        offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
-        offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
-        offset += insert_int32_t_as_big_endian(gs->players[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
-        offset += insert_bytes(gs->players[i].name, MAX_NAME_SIZE, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        offset += insert_char(gs->player_count, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        for (i = 0; i < gs->player_count; i++) {
+            offset += insert_char(gs->players[i].id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+            offset += insert_char(gs->players[i].team_id, send_mem->pdata, sizeof(send_mem->pdata), offset);
+            offset += insert_int32_t_as_big_endian(gs->players[i].score, send_mem->pdata, sizeof(send_mem->pdata), offset);
+            offset += insert_bytes(gs->players[i].name, MAX_NAME_SIZE, send_mem->pdata, sizeof(send_mem->pdata), offset);
+        }
     }
 
     send_mem->datalen = offset;
@@ -864,14 +943,15 @@ void add_client_to_lobby(client *client, lobby *lobby) {
     while (lobby->max_clients == lobby->client_count)
         sleep(1/50.0);
 
+    client->lobby = lobby;
+    client->state = CLIENT_STATE_LOBBY;
     for (i = 0; i < lobby->max_clients; i++) {
         if (lobby->clients[i] == NULL) {
-            lobby->client_count += 1;
             lobby->clients[i] = client;
+            lobby->client_count += 1;
             break;
         }
     }
-    client->state = CLIENT_STATE_LOBBY;
 }
 
 

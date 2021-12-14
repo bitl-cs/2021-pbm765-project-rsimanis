@@ -35,6 +35,7 @@ typedef struct _lobby {
     clock_t last_update;
     char max_clients;
     char client_count;
+    char client_ids[MAX_PLAYER_COUNT];
     client *clients[MAX_PLAYER_COUNT];
 } lobby;
 
@@ -83,6 +84,9 @@ void reset_lobby(lobby *lobby);
 void lobbyloop(server_shared_memory *sh_mem);
 void update_lobby(lobby *lobby, server_shared_memory *sh_mem);
 void gameloop(server_shared_memory *sh_mem);
+void send_game_ready_to_all_players(game_state *gs, server_shared_memory *sh_mem);
+void send_game_state_to_all_players(game_state *gs, server_shared_memory *sh_mem);
+void end_game_for_all_players(game_state *gs, server_shared_memory *sh_mem);
 
 /* client processing */
 void accept_clients(int server_socket, server_shared_memory *sh_mem);

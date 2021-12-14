@@ -209,13 +209,92 @@ void process_message_from_server(char *data, client_send_memory *send_mem) {
 
 void process_lobby(char *data, client_send_memory *send_mem) {
     printf("Received LOBBY\n");
+    char i, player_count, player_id, *name;
+
+    player_count = *data;
+    printf("player_count: %d\n", player_count);
+    data += 1;
+    for (i = 0; i < player_count; i++) {
+        player_id = *data;
+        data += 1;
+        name = data;
+        data += MAX_NAME_SIZE;
+        printf("player_id: %d, name=%s\n", player_id, name);
+    }
     // draw lobby
     // drawLobby(data, ...);
 }
 
 void process_game_ready(char *data, client_send_memory *send_mem) {
     printf("Received GAME_READY\n");
+    int window_width, window_height;
+    char team_count, team_id;
+    float team_goal1X, team_goal1Y;
+    float team_goal2X, team_goal2Y;
+    char player_count;
+    char player_id, ready, player_team_id, *name;
+    float player_initial_X, player_initial_Y;
+    float player_initial_width, player_initial_height;
+    char i;
+
+    window_width = big_endian_to_host_int32_t(*((int32_t *) data));
+    printf("window_width: %d\n", window_width);
+    data += 4;
+    window_height = big_endian_to_host_int32_t(*((int32_t *) data));
+    printf("window_height: %d\n", window_height);
+    data += 4;
+    team_count = *data;
+    printf("team_count: %d\n", team_count);
+    data += 1;
+    for (i = 0; i < team_count; i++) {
+        team_id = *data;
+        printf("team_id: %d\n", team_id);
+        data += 1;
+        team_goal1X = big_endian_to_host_float(*((float *) data));
+        printf("team_goal1x: %f\n", team_goal1X);
+        data += 4;
+        team_goal1Y = big_endian_to_host_float(*((float *) data));
+        printf("team_goal1y: %f\n", team_goal1Y);
+        data += 4;
+        team_goal2X = big_endian_to_host_float(*((float *) data));
+        printf("team_goal2x: %f\n", team_goal2X);
+        data += 4;
+        team_goal2Y = big_endian_to_host_float(*((float *) data));
+        printf("team_goal2y: %f\n", team_goal2Y);
+        data += 4;
+    } 
+    player_count = *data;
+    printf("player_count: %d\n", player_count);
+    data += 1;
+    for (i = 0; i < player_count; i++) {
+        player_id = *data;
+        printf("player_id: %d\n", player_id);
+        data += 1;
+        ready = *data;
+        printf("player_ready: %d\n", ready);
+        data += 1;
+        player_team_id = *data;
+        printf("player_team_id: %d\n", player_team_id);
+        data += 1;
+        name = data;
+        printf("player_name: %s\n", name);
+        data += MAX_NAME_SIZE;
+        player_initial_X = big_endian_to_host_float(*((float *) data));
+        printf("player_initial_x: %f\n", player_initial_X);
+        data += 4;
+        player_initial_Y = big_endian_to_host_float(*((float *) data));
+        printf("player_initial_y: %f\n", player_initial_Y);
+        data += 4;
+        player_initial_width = big_endian_to_host_float(*((float *) data));
+        printf("player_initial_width: %f\n", player_initial_width);
+        data += 4;
+        player_initial_height = big_endian_to_host_float(*((float *) data));
+        printf("player_initial_height: %f\n", player_initial_height);
+        data += 4;
+    }
     // initialize game screen
+
+    send_player_ready(0, send_mem);
 }
 
 void process_game_state(char *data, client_send_memory *send_mem) {

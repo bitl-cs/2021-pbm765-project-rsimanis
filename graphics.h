@@ -43,6 +43,9 @@ typedef struct Character {
     unsigned int Advance;    // Offset to advance to next glyph
 } Character;
 
+/* init */
+void init_screen(int argc, char **argv);
+
 /* Helpers */
 float coords_to_screen_location(float coord, char coord_type);
 
