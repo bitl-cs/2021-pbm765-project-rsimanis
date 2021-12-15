@@ -6,7 +6,9 @@
 
 /* gameloop */
 #define GAME_READY_UPDATE_INTERVAL          1/30.0
-#define GAME_STATE_UPDATE_INTERVAL          1/70.0      /* time interval (in seconds) between two game state updates */
+#define GAME_STATE_UPDATE_INTERVAL          1/60.0      /* time interval (in seconds) between two game state updates */
+
+#define GAME_RESTART_WAIT_TIME              4
 
 /* general */
 #define MAX_NAME_SIZE                       20          /* max client username size (19 chars + 1 null byte) */
@@ -80,14 +82,11 @@
 
 #define PLAYER_INITIAL_VELOCITY_X           0
 #define PLAYER_INITIAL_VELOCITY_Y           0
-#define PLAYER_MAX_VELOCITY_X_MOD           0
-#define PLAYER_MAX_VELOCITY_Y_MOD           25
+#define PLAYER_MAX_VELOCITY_MOD             50
 
 #define PLAYER_INITIAL_ACCELERATION_X       0
 #define PLAYER_INITIAL_ACCELERATION_Y       0
-#define PLAYER_ACCELERATION_X_MOD           0           /* magnitude of acceleration */
-#define PLAYER_ACCELERATION_Y_MOD           5           /* magnitude of acceleration */
-
+#define PLAYER_ACCELERATION_MOD             5
 
 #define PLAYER_READY_TRUE                   1           /* player has finished loading the game screen */
 #define PLAYER_READY_FALSE                  0           /* player has not yet finished loading the game screen */
@@ -96,20 +95,17 @@
 #define MAX_BALL_COUNT                      1           /* max balls in a single match */
 #define BALL_INITIAL_COUNT                  MAX_BALL_COUNT
 
-#define BALL_COLLISION_DISTANCE             5
+#define BALL_COLLISION_DISTANCE             20
 
 #define BALL_INITIAL_X                      WINDOW_WIDTH / 2.0
 #define BALL_INITIAL_Y                      WINDOW_HEIGHT / 2.0
 
-#define BALL_INITIAL_VELOCITY_X             5
-#define BALL_INITIAL_VELOCITY_Y             -2
-#define BALL_MAX_VELOCITY_X_MOD             50
-#define BALL_MAX_VELOCITY_Y_MOD             50
+#define BALL_INITIAL_VELOCITY_MOD           20
+#define BALL_MAX_VELOCITY_MOD               50 
 
 #define BALL_INITIAL_ACCELERATION_X         0
 #define BALL_INITIAL_ACCELERATION_Y         0
-#define BALL_ACCELERATION_X_MOD             5
-#define BALL_ACCELERATION_Y_MOD             5
+#define BALL_MAX_ACCELERATION               5
 
 #define BALL_INITIAL_RADIUS                 10
 #define BALL_INITIAL_TYPE                   BALL_TYPE_NORMAL 
@@ -117,6 +113,8 @@
 
 #define BALL_TYPE_NORMAL                    0
 #define BALL_TYPE_ACCELERATING              1
+
+#define BALL_INIT_ANGLE_IN_DEGREES          30
 
 /* power-ups */
 #define MAX_POWER_UP_COUNT                  3           /* max power-ups in a single match */
@@ -181,27 +179,31 @@ typedef struct _game_state {
 
 /* init */
 void init_window(game_state *gs);
-void init_team(team *team, char id, int score, float goal_x1, float goal_y1, float goal_x2, float goal_y2);
-void init_player(player *player, char id, char client_id, char team_id, char ready, char *name, int score, float x, float y, float vx, float vy, float ax, float ay, float width, float height);
-void init_ball(ball *ball, float x, float y, float vx, float vy, float ax, float ay, float radius, char type, char last_touched_id);
+void init_team(team *team, char id, float goal_x1, float goal_y1, float goal_x2, float goal_y2);
+void init_player(player *player, char id, char client_id, char team_id, char *name, float x, float y);
+void init_ball(ball *ball);
 void init_power_up(power_up *power_up, float x, float y, float width, float height, char type);
 void start_game(game_state *gs);
+
+void init_ball_velocity(ball *ball);
+void init_balls(game_state *gs);
 
 /* gameloop */
 int should_update_game_state(game_state *gs);
 void update_game_state(game_state *gs);
-void restart_round(game_state *gs);
+void update_player(player *player);
+void update_ball(ball *player);
 void end_game(game_state *gs);
-int is_everyone_ready(game_state *gs);
 
 /* helpers */
 // player *find_player_by_id(char player_id, game_state *gs);
+void restart_round(game_state *gs);
+int is_everyone_ready(game_state *gs);
 int is_colliding(ball *ball, player *player);
-void update_velocity_component(float *v, float *a, float max_v_mod);
+void update_velocity(vec2f *v, vec2f *a, float max_v_mod);
 int is_winning_team(team *team, game_state *gs);
 void reset_back_players(game_state *gs);
 void reset_front_players(game_state *gs);
-void reset_balls(game_state *gs);
 void reset_power_ups(game_state *gs);
 
 /* debug */

@@ -1,4 +1,5 @@
 #include "graphics.h"
+#include <GL/freeglut_std.h>
 
 
 float coords_to_screen_location(float coord, char coord_type) // coord_type is either 'x' or 'y'
@@ -144,18 +145,18 @@ void draw_game_type_view(){
 //     glutMainLoop();
 // }
 
-int main(int argc, char** argv){
+// int main(int argc, char** argv){
     
-    glutInit(&argc, argv);
-    glutInitWindowPosition(250, 200);
-    glutInitWindowSize(WINDOW_WIDHT, WINDOW_HEIGHT);
-    glutInitDisplayMode(GLUT_RGB | GLUT_SINGLE);
-    glutCreateWindow("Test OpenGL program");
-    glutDisplayFunc(draw_initial_screen);
-    glutMainLoop();
+//     glutInit(&argc, argv);
+//     glutInitWindowPosition(250, 200);
+//     glutInitWindowSize(WINDOW_WIDHT, WINDOW_HEIGHT);
+//     glutInitDisplayMode(GLUT_RGB | GLUT_SINGLE);
+//     glutCreateWindow("Test OpenGL program");
+//     glutDisplayFunc(draw_initial_screen);
+//     glutMainLoop();
 
-    return 0;
-}
+//     return 0;
+// }
 
 // void render_characters(){
 //     FT_Library ft;

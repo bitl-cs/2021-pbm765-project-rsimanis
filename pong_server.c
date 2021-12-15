@@ -75,13 +75,13 @@ void init_teams(game_state *gs) {
 
     /* initialize left team */
     left_team = &gs->teams[LEFT_TEAM_ID];
-    init_team(left_team, LEFT_TEAM_ID, TEAM_INITIAL_SCORE, 
+    init_team(left_team, LEFT_TEAM_ID, 
                 LEFT_GOAL_LINE_UPPER_X, LEFT_GOAL_LINE_UPPER_Y,
                 LEFT_GOAL_LINE_BOTTOM_X, LEFT_GOAL_LINE_BOTTOM_Y);
 
     /* initialize right team */
     right_team = &gs->teams[RIGHT_TEAM_ID];
-    init_team(right_team, RIGHT_TEAM_ID, TEAM_INITIAL_SCORE, 
+    init_team(right_team, RIGHT_TEAM_ID, 
                 RIGHT_GOAL_LINE_UPPER_X, RIGHT_GOAL_LINE_UPPER_Y,
                 RIGHT_GOAL_LINE_BOTTOM_X, RIGHT_GOAL_LINE_BOTTOM_Y);
 }
@@ -93,23 +93,13 @@ void init_back_players(game_state *gs, lobby *lobby) {
     /* initialize left player */
     p = &gs->players[LEFT_BACK_PLAYER_ID];
     c = lobby->clients[LEFT_BACK_PLAYER_ID];
-    init_player(p, LEFT_BACK_PLAYER_ID, c->id, LEFT_TEAM_ID,
-                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
-                LEFT_BACK_PLAYER_INITIAL_X, LEFT_BACK_PLAYER_INITIAL_Y, 
-                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
-                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
-                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    init_player(p, LEFT_BACK_PLAYER_ID, c->id, LEFT_TEAM_ID, c->name, LEFT_BACK_PLAYER_INITIAL_X, LEFT_BACK_PLAYER_INITIAL_Y);
     c->player = p;
 
     /* initialize right player */
     p = &gs->players[RIGHT_BACK_PLAYER_ID];
     c = lobby->clients[RIGHT_BACK_PLAYER_ID];
-    init_player(p, RIGHT_BACK_PLAYER_ID, c->id, RIGHT_TEAM_ID,
-                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
-                RIGHT_BACK_PLAYER_INITIAL_X, RIGHT_BACK_PLAYER_INITIAL_Y,
-                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
-                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
-                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    init_player(p, RIGHT_BACK_PLAYER_ID, c->id, RIGHT_TEAM_ID, c->name, RIGHT_BACK_PLAYER_INITIAL_X, RIGHT_BACK_PLAYER_INITIAL_Y);
     c->player = p;
 }
 
@@ -120,37 +110,16 @@ void init_front_players(game_state *gs, lobby *lobby) {
     /* initialize left player */
     p = &gs->players[LEFT_FRONT_PLAYER_ID];
     c = lobby->clients[LEFT_FRONT_PLAYER_ID];
-    init_player(p, LEFT_FRONT_PLAYER_ID, c->id, LEFT_TEAM_ID,
-                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
-                LEFT_FRONT_PLAYER_INITIAL_X, LEFT_FRONT_PLAYER_INITIAL_Y, 
-                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
-                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
-                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    init_player(p, LEFT_FRONT_PLAYER_ID, c->id, LEFT_TEAM_ID, c->name, LEFT_FRONT_PLAYER_INITIAL_X, LEFT_FRONT_PLAYER_INITIAL_Y);
     c->player = p;
 
     /* initialize right player */
     p = &gs->players[RIGHT_FRONT_PLAYER_ID];
     c = lobby->clients[RIGHT_FRONT_PLAYER_ID];
-    init_player(p, RIGHT_FRONT_PLAYER_ID, c->id, RIGHT_TEAM_ID,
-                PLAYER_READY_FALSE, c->name, PLAYER_INITIAL_SCORE,  
-                RIGHT_FRONT_PLAYER_INITIAL_X, RIGHT_FRONT_PLAYER_INITIAL_Y, 
-                PLAYER_INITIAL_VELOCITY_X, PLAYER_INITIAL_VELOCITY_Y, 
-                PLAYER_INITIAL_ACCELERATION_X, PLAYER_INITIAL_ACCELERATION_Y, 
-                PLAYER_INITIAL_WIDTH, PLAYER_INITIAL_HEIGHT);
+    init_player(p, RIGHT_FRONT_PLAYER_ID, c->id, RIGHT_TEAM_ID, c->name, RIGHT_FRONT_PLAYER_INITIAL_X, RIGHT_FRONT_PLAYER_INITIAL_Y);
     c->player = p;
 }
 
-void init_balls(game_state *gs) {
-    ball *ball;
-
-    gs->ball_count = BALL_INITIAL_COUNT;
-
-    ball = &gs->balls[0];
-    init_ball(ball, BALL_INITIAL_X, BALL_INITIAL_Y, 
-                BALL_INITIAL_VELOCITY_X, BALL_INITIAL_VELOCITY_Y,
-                BALL_INITIAL_ACCELERATION_X, BALL_INITIAL_ACCELERATION_Y,
-                BALL_INITIAL_RADIUS, BALL_TYPE_NORMAL, BALL_INITIAL_LAST_TOUCHED_ID);
-}
 
 void init_power_ups(game_state *gs) {
     gs->power_up_count = POWER_UP_INITIAL_COUNT;
@@ -286,10 +255,8 @@ void gameloop(server_shared_memory *sh_mem) {
                     send_game_state_to_all_players(gs, sh_mem);
                 }
             }
-            else if (gs->status == GAME_STATE_STATUS_SUCCESS || gs->status == GAME_STATE_STATUS_ERROR) {
+            else if (gs->status == GAME_STATE_STATUS_SUCCESS || gs->status == GAME_STATE_STATUS_ERROR)
                 end_game_for_all_players(gs, sh_mem);
-                gs->status = GAME_STATE_STATUS_FREE;
-            }
         }
     }
 }
@@ -333,6 +300,7 @@ void end_game_for_all_players(game_state *gs, server_shared_memory *sh_mem) {
         if (gs->status == GAME_STATE_STATUS_ERROR)
             send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, "Something went wrong", c);
     }
+    gs->status = GAME_STATE_STATUS_FREE;
 }
 
 
@@ -474,16 +442,17 @@ void *receive_client_packets(void *arg) {
                 else {
                     sep_count++;
                     if (sep_count == PACKET_SEPARATOR_SIZE) {
-                        /* convert packet header to host endianess */ 
-                        *pn = big_endian_to_host_uint32_t(*pn);
-                        *psize = big_endian_to_host_int32_t(*psize);
-
                         // printstr("packet received");
                         // print_bytes(packet, i);
 
                         /* verify packet */
                         if (verify_packet(recv_pn, packet_buf, i) != 0) {
+                            /* convert packet header to host endianess */ 
+                            *pn = big_endian_to_host_uint32_t(*pn);
+                            *psize = big_endian_to_host_int32_t(*psize);
+
                             *packet_ready = PACKET_READY_TRUE;
+    
                             recv_pn = *pn + 1;
                         }
 
@@ -648,9 +617,9 @@ void process_player_input(char *data, client *client, server_shared_memory *sh_m
 
     if (client->state == CLIENT_STATE_GAME && client->player != NULL) {
         if (down && !up)
-            client->player->a.y = PLAYER_ACCELERATION_Y_MOD;
+            client->player->a.y = PLAYER_ACCELERATION_MOD;
         else if (up && !down)
-            client->player->a.y = -PLAYER_ACCELERATION_Y_MOD;
+            client->player->a.y = -PLAYER_ACCELERATION_MOD;
         else
             client->player->a.y = 0;
     }
@@ -719,8 +688,8 @@ void *send_server_packets(void *arg) {
 
 void send_server_packet(uint32_t pn, int32_t psize, server_send_memory *send_mem, char *buf, char *final_buf, int socket) {
     send_packet(pn, send_mem->pid, psize, send_mem->pdata, send_mem->datalen, 
-                    buf, PACKET_HEADER_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE, 
-                    final_buf, (PACKET_HEADER_SIZE + PACKET_FROM_SERVER_MAX_DATA_SIZE) * 2 + PACKET_SEPARATOR_SIZE, 
+                    buf, PACKET_FROM_SERVER_MAX_SIZE, 
+                    final_buf, PACKET_FROM_SERVER_MAX_SIZE * 2 + PACKET_SEPARATOR_SIZE, 
                     socket);
 }
 
@@ -825,7 +794,7 @@ void send_game_state(client *client) {
     send_mem = &client->send_mem;
     while (send_mem->packet_ready == PACKET_READY_TRUE)
         sleep(PACKET_READY_WAIT_TIME);
-
+    
     send_mem->pid = PACKET_GAME_STATE_ID;
     offset = insert_int32_t_as_big_endian(gs->window_width, send_mem->pdata, sizeof(send_mem->pdata), 0);
     offset += insert_int32_t_as_big_endian(gs->window_height, send_mem->pdata, sizeof(send_mem->pdata), offset);

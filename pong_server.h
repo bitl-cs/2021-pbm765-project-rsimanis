@@ -74,14 +74,12 @@ void init_lobby(lobby *lobby, int max_clients);
 void init_teams(game_state *gs);
 void init_back_players(game_state *gs, lobby *lobby);
 void init_front_players(game_state *gs, lobby *lobby);
-void init_balls(game_state *gs);
 void init_power_ups(game_state *gs);
 void init_game_1v1(game_state *gs, lobby *lobby);
 void init_game_2v2(game_state *gs, lobby *lobby);
 
 /* game */
 void reset_lobby(lobby *lobby);
-void lobbyloop(server_shared_memory *sh_mem);
 void update_lobby(lobby *lobby, server_shared_memory *sh_mem);
 void gameloop(server_shared_memory *sh_mem);
 void send_game_ready_to_all_players(game_state *gs, server_shared_memory *sh_mem);

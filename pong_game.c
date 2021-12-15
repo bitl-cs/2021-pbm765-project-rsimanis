@@ -4,44 +4,50 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 /* init */
-void init_team(team *team, char id, int score, float goal_x1, float goal_y1, float goal_x2, float goal_y2) {
+void init_team(team *team, char id, float goal_x1, float goal_y1, float goal_x2, float goal_y2) {
     team->id = id;
-    team->score = score;
+    team->score = TEAM_INITIAL_SCORE;
     team->goal1.x = goal_x1;
     team->goal1.y = goal_y1;
     team->goal2.x = goal_x2;
     team->goal2.y = goal_y2;
 }
 
-void init_player(player *player, char id, char client_id, char team_id, char ready, char *name, int score, float x, float y, float vx, float vy, float ax, float ay, float width, float height) {
+void init_player(player *player, char id, char client_id, char team_id, char *name, float x, float y) {
     player->id = id;
     player->client_id = client_id;
     player->team_id = team_id;
-    player->ready = ready;
+    player->ready = PLAYER_READY_FALSE;
     player->name = name;
-    player->score = score;
+    player->score = PLAYER_INITIAL_SCORE;
     player->pos.x = x;
     player->pos.y = y;
-    player->v.x = vx;
-    player->v.y = vy;
-    player->a.x = ax;
-    player->a.y = ay;
-    player->width = width;
-    player->height = height;
+    player->v.x = PLAYER_INITIAL_VELOCITY_X;
+    player->v.y = PLAYER_INITIAL_VELOCITY_Y;
+    player->a.x = PLAYER_INITIAL_ACCELERATION_X;
+    player->a.y = PLAYER_INITIAL_ACCELERATION_Y;
+    player->width = PLAYER_INITIAL_WIDTH;
+    player->height = PLAYER_INITIAL_HEIGHT;
 }
 
-void init_ball(ball *ball, float x, float y, float vx, float vy, float ax, float ay, float radius, char type, char last_touched_id) {
-    ball->pos.x = x;
-    ball->pos.y = y;
-    ball->v.x = vx;
-    ball->v.y = vy;
-    ball->a.x = ax;
-    ball->a.y = ay;
-    ball->radius = radius;
-    ball->type = type;
-    ball->last_touched_id = last_touched_id;
+void init_ball(ball *ball) {
+    ball->pos.x = BALL_INITIAL_X;
+    ball->pos.x = BALL_INITIAL_Y;
+    init_ball_velocity(ball);
+    ball->a.x = BALL_INITIAL_ACCELERATION_X;
+    ball->a.y = BALL_INITIAL_ACCELERATION_Y;
+    ball->radius = BALL_INITIAL_RADIUS;
+    ball->type = BALL_TYPE_NORMAL;
+    ball->last_touched_id = BALL_INITIAL_LAST_TOUCHED_ID;
+}
+
+void init_ball_velocity(ball *ball) {
+    rand_vec2f(&ball->v, BALL_INITIAL_VELOCITY_MOD);
+    while (angle_with_horizon_vec2f(&ball->v) > BALL_INIT_ANGLE_IN_DEGREES)
+        rand_vec2f(&ball->v, BALL_INITIAL_VELOCITY_MOD);
 }
 
 void init_power_up(power_up *power_up, float x, float y, float width, float height, char type) {
@@ -74,78 +80,67 @@ int should_update_game_state(game_state *gs) {
 void update_game_state(game_state *gs) {
     char i, j;
     float new_pos_x, new_pos_y;
-    team *t;
-    player *p;
+    team *t, *scored_team;
+    player *p, *scored_player;
     ball *b;
     power_up *pu;
 
-    /* iterate over all players */
-    for (i = 0; i < gs->player_count; i++) {
-        p = &gs->players[i];
-
-        /* update velocity */
-        update_velocity_component(&p->v.x, &p->a.x, PLAYER_MAX_VELOCITY_X_MOD);
-        update_velocity_component(&p->v.y, &p->a.y, PLAYER_MAX_VELOCITY_Y_MOD);
-
-        /* update positions */            
-        p->pos.x += p->v.x;
-        p->pos.y += p->v.y;
-
-    }
+    /* update players */
+    for (i = 0; i < gs->player_count; i++)
+        update_player(&gs->players[i]);
 
     /* itereate over all balls */
     for (i = 0; i < gs->ball_count; i++) {
         b = &gs->balls[i];  
-
-        /* update positions */            
-        update_velocity_component(&b->v.x, &b->a.x, BALL_MAX_VELOCITY_X_MOD);
-        update_velocity_component(&b->v.y, &b->a.y, BALL_MAX_VELOCITY_Y_MOD);
-
-        /* update positions */            
-        b->pos.x += b->v.x;
-        b->pos.y += b->v.y;
-
-        /* check for colision with goal lines */
-        // iterate over all teams
-            // if colliding with line
-                // update player score, team score, reset game board
-        for (j = 0; j < gs->team_count; j++) {
-            t = &gs->teams[j];
-            // assuming that goal lines are ALWAYS vertical
-            if (mod_f(b->pos.x - t->goal1.x) < BALL_COLLISION_DISTANCE) {
-                gs->players[b->last_touched_id].score += 1;
-                gs->teams[gs->players[b->last_touched_id].team_id].score += 1;
-                if (is_winning_team(&gs->teams[gs->players[b->last_touched_id].team_id], gs))
-                    end_game(gs);
-                else
-                    restart_round(gs);
-            }
-        }
+        update_ball(b);
 
         /* check for collision with players */
         for (j = 0; j < gs->player_count; j++) {
             p = &gs->players[j];
-
             if ((b->pos.y >= p->pos.y) && (b->pos.y <= p->pos.y + p->height) && 
                 (b->pos.x + b->radius >= p->pos.x) && (b->pos.x - b->radius <= p->pos.x + p->width)) {
-                reverse_vec2f(&b->v);
-                reverse_vec2f(&b->a);
+                rev_vec2f(&b->v);
+                rev_vec2f(&b->a);
             }
-        }
-
-        /* check for collision with walls (top and bottom) */
-        if ((b->pos.y >= WINDOW_HEIGHT - b->radius) || (b->pos.y <= b->radius)) {
-            b->a.y = -b->a.y;
-            b->v.y = -b->v.y;
         }
 
         /* check for collision with power-ups */
         // iterate over all power-ups 
             // if ball is inside power-up
                 // apply powerup to ball/player based on its type, and remove it from the map
-    }
 
+        /* check for colision with team goal lines */
+        for (j = 0; j < gs->team_count; j++) {
+            t = &gs->teams[j];
+            // assuming that goal lines are ALWAYS vertical
+            if (mod_f(b->pos.x - t->goal1.x) <= BALL_COLLISION_DISTANCE) {
+                if (b->last_touched_id != BALL_INITIAL_LAST_TOUCHED_ID) {
+                    scored_player = &gs->players[b->last_touched_id];
+                    scored_team = &gs->teams[scored_player->team_id];
+                    scored_player->score += 1;
+                }
+                else {
+                    /* assuming that there are ALWAYS precisely two teams */
+                    scored_team = (t->id == LEFT_TEAM_ID) ? &gs->teams[RIGHT_TEAM_ID] : &gs->teams[LEFT_TEAM_ID];
+                }
+                scored_team->score += 1;
+                if (is_winning_team(scored_team, gs))
+                    end_game(gs);
+                else
+                    restart_round(gs);
+            }
+        }
+    }
     gs->last_update = clock();
+}
+
+void init_balls(game_state *gs) {
+    int i;
+    ball *ball;
+
+    gs->ball_count = BALL_INITIAL_COUNT;
+    for (i = 0; i < gs->ball_count; i++)
+        init_ball(&gs->balls[i]);
 }
 
 void end_game(game_state *gs) {
@@ -159,17 +154,103 @@ void restart_round(game_state *gs) {
     reset_back_players(gs);
     if (gs->game_type == GAME_TYPE_2V2)
         reset_front_players(gs);
-    reset_balls(gs);
+    init_balls(gs);
     reset_power_ups(gs);
+    sleep(GAME_RESTART_WAIT_TIME);
 }
 
-void update_velocity_component(float *v, float *a, float max_v_mod) {
-    if (diff_signs_f(*v, *a)) {
-        if (mod_f(*v) <= max_v_mod)
-            *v += *a; 
-    }
+void update_velocity(vec2f *v, vec2f *a, float max_v_mod) {
+    float a_mag, v_mag;
+
+    v_mag = mag_vec2f(v);
+    a_mag = mag_vec2f(a);
+    if (v_mag + a_mag <= max_v_mod)
+        add_vec2f(v, a);
+}
+
+/* make sure than nothing goes out of the screen's borders */
+/* maybe in some later implementation player might move on x axis as well */
+void update_player(player *player) {
+    vec2f *p, *v, *a;
+    float fin_x, fin_y;
+    float upper_lim, lower_lim, left_lim, right_lim;
+
+    p = &player->pos;
+    v = &player->v;
+    a = &player->a;
+
+    upper_lim = 0;
+    lower_lim = WINDOW_HEIGHT - player->height;
+    // left_lim = 0;
+    // right_lim = WINDOW_WIDTH - player->width;
+
+    update_velocity(v, a, PLAYER_MAX_VELOCITY_MOD);
+
+    // fin_x = p->x + v->x;
+    fin_y = p->y + v->y;
+
+    // if (fin_x < left_lim)
+    //     p->x = left_lim;
+    // else if (fin_x > right_lim)
+    //     p->x = right_lim;
+    // else
+    //     p->x = fin_x;
+
+    if (fin_y < upper_lim)
+        p->y = upper_lim;
+    else if (fin_y > lower_lim)
+        p->y = lower_lim;
     else
-        *v += *a;
+        p->y = fin_y;
+}
+
+void update_ball(ball *ball) {
+    vec2f *p, *v, *a;
+    float fin_x, fin_y;
+    float upper_lim, lower_lim, left_lim, right_lim;
+
+    p = &ball->pos;
+    v = &ball->v;
+    a = &ball->a;
+
+    upper_lim = ball->radius;
+    lower_lim = WINDOW_HEIGHT - ball->radius;
+    left_lim = ball->radius;
+    right_lim = WINDOW_WIDTH - ball->radius;
+
+    update_velocity(v, a, BALL_MAX_VELOCITY_MOD);
+
+    /* update x coordinate */
+    fin_x = p->x + v->x;
+    if (fin_x < left_lim) {
+        p->x = left_lim;
+        v->x *= -1;
+        a->x *= -1;
+    }
+    else if (fin_x > right_lim) {
+        p->x = right_lim;
+        v->x *= -1;
+        a->x *= -1;
+    }
+    // TODO: check if ball x touches players paddle
+    else
+        p->x = fin_x;
+
+    /* update y coordinate */
+    fin_y = p->y + v->y;
+    if (fin_y < upper_lim) {
+        p->y = upper_lim;
+        v->y *= -1;
+        a->y *= -1;
+    }
+    else if (fin_y > lower_lim) {
+        p->y = lower_lim;
+        v->y *= -1;
+        a->y *= -1;
+    }
+    // TODO: check if ball y touches players paddle
+    else
+        p->y = fin_y;
 }
 
 int is_winning_team(team *team, game_state *gs) {
@@ -193,7 +274,6 @@ void reset_back_players(game_state *gs) {
     player *lp, *rp;
 
     lp = &gs->players[LEFT_BACK_PLAYER_ID];
-    lp = &gs->players[LEFT_BACK_PLAYER_ID];
     lp->pos.x = LEFT_BACK_PLAYER_INITIAL_X;
     lp->pos.y = LEFT_BACK_PLAYER_INITIAL_Y;
     lp->v.x = PLAYER_INITIAL_VELOCITY_X;
@@ -212,7 +292,6 @@ void reset_back_players(game_state *gs) {
     rp->a.y = PLAYER_INITIAL_ACCELERATION_Y;
     rp->width = PLAYER_INITIAL_WIDTH;
     rp->height = PLAYER_INITIAL_HEIGHT;
-
 }
 
 void reset_front_players(game_state *gs) {
@@ -237,25 +316,6 @@ void reset_front_players(game_state *gs) {
     rp->a.y = PLAYER_INITIAL_ACCELERATION_Y;
     rp->width = PLAYER_INITIAL_WIDTH;
     rp->height = PLAYER_INITIAL_HEIGHT;
-
-}
-
-void reset_balls(game_state *gs) {
-    char i;
-    ball *b;
-    
-    for (i = 0; i < gs->ball_count; i++) {
-        b = &gs->balls[i];
-        b->pos.x = BALL_INITIAL_X;
-        b->pos.y = BALL_INITIAL_Y;
-        b->v.x = BALL_INITIAL_VELOCITY_X;
-        b->v.y = BALL_INITIAL_VELOCITY_Y;
-        b->a.x = BALL_INITIAL_ACCELERATION_X;
-        b->a.y = BALL_INITIAL_ACCELERATION_Y;
-        b->radius = BALL_INITIAL_RADIUS;
-        b->last_touched_id = BALL_INITIAL_LAST_TOUCHED_ID;
-        b->type = BALL_TYPE_NORMAL;
-    }
 }
 
 void reset_power_ups(game_state *gs) {

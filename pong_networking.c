@@ -172,30 +172,36 @@ void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size
     /* add packet number */
     offset += insert_uint32_t_as_big_endian(pn, buf, buf_size, offset);
     // print_bytes(packet, offset);
+    // printint("offset", offset);
 
     /* add packet id */
     offset += insert_char(pid, buf, buf_size, offset); 
     // print_bytes(packet, offset);
+    // printint("offset", offset);
 
     /* add the size of data segment */
     offset += insert_int32_t_as_big_endian(psize, buf, buf_size, offset);
     // print_bytes(packet, offset);
+    // printint("offset", offset);
 
     /* add data (assumes that data is in network byte order) */
     offset += insert_bytes(data, datalen, buf, buf_size, offset);
     // print_int("datalen", *(send_mem_cfg->datalen));
     // print_bytes(packet, offset);
+    // printint("offset", offset);
 
     /* fill the unused data segment with null bytes */
     offset += insert_null_bytes(psize - datalen, buf, buf_size, offset);
     // print_int("rem datalen", psize - *(send_mem_cfg->datalen));
     // print_int("offset", offset);
     // print_bytes(packet, offset);
+    // printint("offset", offset);
 
     /* add checksum */
     offset += insert_char(xor_checksum(buf, PACKET_HEADER_SIZE + datalen), buf, buf_size, offset);
     // printf("before encoding: \n");
-    // print_bytes(packet, offset);
+    // print_bytes(buf, offset);
+    // printint("offset", offset);
 
     /* encode */
     offset = encode(buf, offset, final_buf, final_buf_size - PACKET_SEPARATOR_SIZE);
@@ -204,7 +210,7 @@ void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size
 
     /* add separator */
     offset += insert_separator(final_buf, final_buf_size, offset);
-    // printf("after separator: \n");
+    // printf("packet send: \n");
     // print_bytes(final_buf, offset);
 
     /* send packet to socket */ 
@@ -333,10 +339,15 @@ char xor_checksum(char *data, size_t len) {
 }
 
 char verify_packet(uint32_t exp_pn, char *packet, int32_t decoded_size) {
-    uint32_t pn = *((uint32_t *) packet);
+    uint32_t pn = big_endian_to_host_uint32_t(*((uint32_t *) packet));
     int32_t psize = decoded_size - PACKET_HEADER_SIZE - PACKET_FOOTER_SIZE;
-    int32_t exp_psize = *((int32_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE));
+    int32_t exp_psize = big_endian_to_host_uint32_t(*((int32_t *) (packet + PACKET_NUMBER_SIZE + PACKET_ID_SIZE)));
     char checksum = packet[decoded_size - PACKET_CHECKSUM_SIZE];
+
+    // printf("%d %d\n", pn, exp_pn);
+    // printf("%d %d\n", psize, exp_psize);
+    // printf("%d %d\n", checksum, xor_checksum(packet, PACKET_HEADER_SIZE + psize));
+
 
     return ((pn >= exp_pn) || ((exp_pn >= UINT32_MAX - 50) && (pn >= 0))) &&
             (psize == exp_psize) &&

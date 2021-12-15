@@ -54,16 +54,17 @@ void *receive_server_packets(void *arg) {
                 else {
                     sep_count++;
                     if (sep_count == PACKET_SEPARATOR_SIZE) {
-                        /* convert packet header to host endianess */ 
-                        *pn = big_endian_to_host_uint32_t(*pn);
-                        *psize = big_endian_to_host_int32_t(*psize);
-
                         // printstr("packet received");
                         // print_bytes(packet_buf, i);
 
                         /* verify packet */
                         if (verify_packet(recv_pn, packet_buf, i) != 0) {
+                            /* convert packet header to host endianess */ 
+                            *pn = big_endian_to_host_uint32_t(*pn);
+                            *psize = big_endian_to_host_int32_t(*psize);
+
                             *packet_ready = PACKET_READY_TRUE;
+    
                             recv_pn = *pn + 1;
                         }
 
@@ -237,12 +238,15 @@ void process_game_ready(char *data, client_send_memory *send_mem) {
     float player_initial_width, player_initial_height;
     char i;
 
+    // window
     window_width = big_endian_to_host_int32_t(*((int32_t *) data));
     printf("window_width: %d\n", window_width);
     data += 4;
     window_height = big_endian_to_host_int32_t(*((int32_t *) data));
     printf("window_height: %d\n", window_height);
     data += 4;
+
+    // teams
     team_count = *data;
     printf("team_count: %d\n", team_count);
     data += 1;
@@ -263,6 +267,8 @@ void process_game_ready(char *data, client_send_memory *send_mem) {
         printf("team_goal2y: %f\n", team_goal2Y);
         data += 4;
     } 
+
+    // players
     player_count = *data;
     printf("player_count: %d\n", player_count);
     data += 1;
@@ -300,6 +306,129 @@ void process_game_ready(char *data, client_send_memory *send_mem) {
 void process_game_state(char *data, client_send_memory *send_mem) {
     printf("Received GAME_STATE\n");
     // draw game state
+    int window_width, window_height;
+
+    char team_count;
+    char team_id;
+    int team_score;
+    float team_goal1X, team_goal1Y;
+    float team_goal2X, team_goal2Y;
+
+    char player_count;
+    char player_id, player_team_id;
+    float player_x, player_y;
+    float player_width, player_height;
+
+    char ball_count;
+    float ball_x, ball_y;
+    float ball_radius;
+    char ball_type;
+
+    char power_up_count;
+    char power_up_type;
+    float power_up_x, power_up_y;
+    float power_up_width, power_up_height;
+    char i;
+
+    // window
+    window_width = big_endian_to_host_int32_t(*((int32_t *) data));
+    printf("window_width: %d\n", window_width);
+    data += 4;
+    window_height = big_endian_to_host_int32_t(*((int32_t *) data));
+    printf("window_height: %d\n", window_height);
+    data += 4;
+
+    // teams
+    team_count = *data;
+    printf("team_count: %d\n", team_count);
+    data += 1;
+    for (i = 0; i < team_count; i++) {
+        team_id = *data;
+        printf("team_id: %d\n", team_id);
+        data += 1;
+        team_score = big_endian_to_host_int32_t(*((int32_t *) data));
+        printf("team_score: %d\n", team_score);
+        data += 4;
+        team_goal1X = big_endian_to_host_float(*((float *) data));
+        printf("team_goal1x: %f\n", team_goal1X);
+        data += 4;
+        team_goal1Y = big_endian_to_host_float(*((float *) data));
+        printf("team_goal1y: %f\n", team_goal1Y);
+        data += 4;
+        team_goal2X = big_endian_to_host_float(*((float *) data));
+        printf("team_goal2x: %f\n", team_goal2X);
+        data += 4;
+        team_goal2Y = big_endian_to_host_float(*((float *) data));
+        printf("team_goal2y: %f\n", team_goal2Y);
+        data += 4;
+    } 
+
+    // players
+    player_count = *data;
+    printf("player_count: %d\n", player_count);
+    data += 1;
+    for (i = 0; i < player_count; i++) {
+        player_id = *data;
+        printf("player_id: %d\n", player_id);
+        data += 1;
+        player_team_id = *data;
+        printf("player_team_id: %d\n", player_team_id);
+        data += 1;
+        player_x = big_endian_to_host_float(*((float *) data));
+        printf("player_x: %f\n", player_x);
+        data += 4;
+        player_y = big_endian_to_host_float(*((float *) data));
+        printf("player_y: %f\n", player_y);
+        data += 4;
+        player_width = big_endian_to_host_float(*((float *) data));
+        printf("player_width: %f\n", player_width);
+        data += 4;
+        player_height = big_endian_to_host_float(*((float *) data));
+        printf("player_height: %f\n", player_height);
+        data += 4;
+    }
+
+    // balls
+    ball_count = *data;
+    printf("ball_count: %d\n", ball_count);
+    data += 1;
+    for (i = 0; i < ball_count; i++) {
+        ball_x = big_endian_to_host_float(*((float *) data));
+        printf("ball_x: %f\n", ball_x);
+        data += 4;
+        ball_y = big_endian_to_host_float(*((float *) data));
+        printf("ball_y: %f\n", ball_y);
+        data += 4;
+        ball_radius = big_endian_to_host_float(*((float *) data));
+        printf("ball_radius: %f\n", ball_radius);
+        data += 4;
+        ball_type = *data;
+        printf("ball_type: %d\n", ball_type);
+        data += 1;
+    }
+
+    // power_ups
+    power_up_count = *data;
+    printf("power_up_count: %d\n", power_up_count);
+    data += 1;
+    for (i = 0; i < power_up_count; i++) {
+        power_up_type = *data;
+        printf("power_up_type: %d\n", power_up_type);
+        data += 1;
+        power_up_x = big_endian_to_host_float(*((float *) data));
+        printf("power_up_x: %f\n", power_up_x);
+        data += 4;
+        power_up_y = big_endian_to_host_float(*((float *) data));
+        printf("power_up_y: %f\n", power_up_y);
+        data += 4;
+        power_up_width = big_endian_to_host_float(*((float *) data));
+        printf("power_up_width: %f\n", power_up_width);
+        data += 4;
+        power_up_height = big_endian_to_host_float(*((float *) data));
+        printf("power_up_height: %f\n", power_up_height);
+        data += 4;
+    }
+    putchar('\n');
 }
 
 void process_game_end(char *data, client_send_memory *send_mem) {
@@ -315,8 +444,8 @@ void process_return_to_menu(client_send_memory *send_mem) {
 
 void send_client_packet(uint32_t pn, int32_t psize, client_send_memory *send_mem, char *buf, char *final_buf, int socket) {
     send_packet(pn, send_mem->pid, psize, send_mem->pdata, send_mem->datalen, 
-                    buf, PACKET_HEADER_SIZE + PACKET_FROM_CLIENT_MAX_DATA_SIZE, 
-                    final_buf, (PACKET_HEADER_SIZE + PACKET_FROM_CLIENT_MAX_DATA_SIZE) * 2 + PACKET_SEPARATOR_SIZE, 
+                    buf, PACKET_FROM_CLIENT_MAX_SIZE, 
+                    final_buf, PACKET_FROM_CLIENT_MAX_SIZE * 2 + PACKET_SEPARATOR_SIZE, 
                     socket);
 }
 

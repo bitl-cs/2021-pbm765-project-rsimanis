@@ -5,7 +5,7 @@ CLIENT_MAIN = client.c
 CLIENT_EXE = client
 
 CFLAGS = -std=gnu90 -fno-common -Wall -Wextra
-LDFLAGS = -lpthread -lGL -lGLU -lglut
+LDFLAGS = -lpthread -lGL -lGLU -lglut -lm
 
 CFILES_BOTH = args.c pong_networking.c pong_math.c pong_game.c 
 CFILES_SERVER = $(CFILES_BOTH) pong_server.c $(SERVER_MAIN)

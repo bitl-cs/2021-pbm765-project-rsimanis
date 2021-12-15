@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include <math.h>
+#include "pong_math.h"
 
 #define PACKET_SEPARATOR "--"
 
@@ -98,17 +100,44 @@ int main() {
     // send_lobby(1, "??????????", 8, 0);
     // send_lobby(1, "abcd", 2, 0);
 
-    // send_player_ready(1, 0);
+    // lnode *head;
+    // init_list("pirmais", &head);
+    // print_list(head);
+    // putchar('\n');
+    // push_back("otrais", &head);
+    // print_list(head);
+    // putchar('\n');
+    // pop_front(&head);
+    // print_list(head);
+    // putchar('\n');
+    // push_back("tresais", &head);
+    // print_list(head);
+    // putchar('\n');
+    // push_back("ceturtais", &head);
+    // print_list(head);
+    // putchar('\n');
+    // push_back("piektais", &head);
+    // print_list(head);
+    // putchar('\n');
+    // pop_front(&head);
+    // print_list(head);
+    // putchar('\n');
+    // pop_front(&head);
+    // print_list(head);
+    // putchar('\n');
+    // free_list(&head);
 
-    // char buf[10];
-    // memset(buf, 0, 10);
-    // show_bytes(buf, 10);
-    // insert_int32_t_as_big_endian(64, buf, 10, 7);
-    // show_bytes(buf, 10);
-    int a = (31 + (2 - 1)) / 2;
-    printf("%d\n", a);
-
-
+    vec2f v;
+    v.x = 3;
+    v.y = 4;
+    print_vec2f(&v);
+    int i;
+    for (i = 0; i < 10; i++) {
+        rand_vec2f(&v, 5);
+        print_vec2f(&v);
+        printf("mag: %f\n", mag_vec2f(&v));
+    }
+    printf("mag: %f\n", mag_vec2f(&v));
     return 0;
 }
 
