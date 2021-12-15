@@ -315,7 +315,6 @@ void accept_clients(int server_socket, server_shared_memory *sh_mem) {
         if (client_socket<0) {
             printf("  Soft ERROR accepting the client connection! ERRNO=%d Continuing...\n", errno);
             continue;
-            /* WE CAN accept other clients if this fails to connect so continue! */
         }
 
         /* New client */
@@ -326,53 +325,38 @@ void accept_clients(int server_socket, server_shared_memory *sh_mem) {
             continue;
         }
 
-        /* We have a client connection - doublefork&orphan to process it, main thread closes socket and listens for a new one */
         tid = fork();
         if (tid == 0){
-            /* child - will double fork & orphan */
             close(server_socket);
             tid = fork();
             if (tid == 0){
-                /* NOTE: ideally You would check if clients disconnect and reduce client_count to allow new connections, this is not yet implemented */
                 process_client(new_client, sh_mem);
                 exit(0);
             }
             else {
-                /* orphaning */
                 wait(NULL); /* blocks parent process until any of its children has finished */
-                // printf("Successfully orphaned client %d\n", new_client->id);
                 exit(0);
             }
         }
-        else {
-            /* parent - go to listen to the next client connection */
+        else
             close(client_socket);
-        }
     }
 }
 
 void process_client(client *client, server_shared_memory* sh_mem) {
     printf("CLIENT connected (client_count=%d, client_id=%d, socket=%d)\n", sh_mem->client_count, client->id, client->socket);
 
-    /* initialize thread arguments */
-    server_recv_send_thread_args srsta;
-    srsta.client = client;
-    srsta.sh_mem = sh_mem;
-
-    /* initialize packet receiving thread */
-    pthread_t receiving_thread_id;
-    if (pthread_create(&receiving_thread_id, NULL, receive_client_packets, (void *) &srsta) != 0)
-        exit(-1);
-    sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
-
     /* initialize packet sending thread */
+    server_send_thread_args sta;
+    sta.client = client;
+    sta.sh_mem = sh_mem;
     pthread_t sending_thread_id;
-    if (pthread_create(&sending_thread_id, NULL, send_server_packets, (void *) &srsta) != 0)
+    if (pthread_create(&sending_thread_id, NULL, send_server_packets, (void *) &sta) != 0)
         exit(-1);
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
-    /* process already validated incoming packets */
-    process_client_packets(client, sh_mem);
+    /* validate and process incoming server packets */
+    receive_client_packets(client, sh_mem);
 }
 
 
@@ -392,7 +376,6 @@ client *init_client(server_shared_memory *sh_mem, int socket) {
             cl->state = CLIENT_STATE_JOIN;
             cl->lobby = NULL;
             cl->game_state = NULL;
-            cl->recv_mem.packet_ready = PACKET_READY_FALSE;
             cl->send_mem.packet_ready = PACKET_READY_FALSE;
             return cl;
         }
@@ -407,19 +390,12 @@ void remove_client(client *client, server_shared_memory *sh_mem) {
 }
 
 /* packet processing */
-/* validate incoming packets */
-void *receive_client_packets(void *arg) {
-    /* process thread arguments */
-    server_recv_send_thread_args *srsta = (server_recv_send_thread_args *) arg;
-    client *client = srsta->client;
-    server_shared_memory *sh_mem = srsta->sh_mem;
-
+void receive_client_packets(client *client , server_shared_memory *sh_mem) {
     /* initialize packet number counter for received packets */
     uint32_t recv_pn = 0;
 
     /* variables for code clarity */
     server_recv_memory *recv_mem = &client->recv_mem;
-    char *packet_ready = &recv_mem->packet_ready;
     char *packet_buf = recv_mem->packet_buf;
     uint32_t *pn = (uint32_t *) packet_buf;
     int32_t *psize = (int32_t *) (packet_buf + PACKET_NUMBER_SIZE + PACKET_ID_SIZE);
@@ -432,10 +408,6 @@ void *receive_client_packets(void *arg) {
 
     while (1) {
         if ((len = recv(client->socket, &c, 1, 0)) > 0) {
-            /* wait until another packet is processed */
-            while (*packet_ready) 
-                sleep(PACKET_READY_WAIT_TIME);
-
             if (c == '-') {
                 if (prevc == '?')
                     packet_buf[i++] = '-';
@@ -443,7 +415,7 @@ void *receive_client_packets(void *arg) {
                     sep_count++;
                     if (sep_count == PACKET_SEPARATOR_SIZE) {
                         // printstr("packet received");
-                        // print_bytes(packet, i);
+                        // print_bytes(packet_buf, i);
 
                         /* verify packet */
                         if (verify_packet(recv_pn, packet_buf, i) != 0) {
@@ -451,9 +423,11 @@ void *receive_client_packets(void *arg) {
                             *pn = big_endian_to_host_uint32_t(*pn);
                             *psize = big_endian_to_host_int32_t(*psize);
 
-                            *packet_ready = PACKET_READY_TRUE;
-    
+                            /* update expected packet number */
                             recv_pn = *pn + 1;
+
+                            /* process packet data */
+                            process_client_packets(client, sh_mem);
                         }
 
                         c = prevc = i = sep_count = 0;
@@ -474,55 +448,44 @@ void *receive_client_packets(void *arg) {
             prevc = c;
         }
         else if (len == 0) {
-            printf("Client disconnected (id=%d, socket=%d)\n", client->id, client->socket);
+            printf("Client (id=%d) disconnected\n", client->id);
             remove_client(client, sh_mem);
             exit(0);
         }
         else {
-            printf("Recv() error (errno=%d)\n", errno);
-            printf("Removing client... (id=%d, socket=%d)\n", client->id, client->socket);
+            printf("Client (id=%d) recv() error (errno=%d). Removing...\n", client->id, errno);
             remove_client(client, sh_mem);
             exit(-1);
         }
     }
-    return NULL;
 }
 
-
+/* process already validated packets */
 void process_client_packets(client *client, server_shared_memory *sh_mem) {
-    server_recv_memory *recv_mem = &(client->recv_mem);
-    char *packet_ready = &recv_mem->packet_ready;
-    unsigned char *pid = (unsigned char *) (recv_mem->packet_buf + PACKET_NUMBER_SIZE);
-    char *pdata = recv_mem->packet_buf + PACKET_HEADER_SIZE;
+    unsigned char *pid = (unsigned char *) (client->recv_mem.packet_buf + PACKET_NUMBER_SIZE);
+    char *pdata = client->recv_mem.packet_buf + PACKET_HEADER_SIZE;
 
-    while (1) {
-        if (*packet_ready == PACKET_READY_TRUE) {
-            switch (*pid) {
-                case PACKET_JOIN_ID:
-                    process_join(pdata, client, sh_mem);
-                    break;
-                case PACKET_MESSAGE_ID:
-                    process_message_from_client(pdata, client, sh_mem);
-                    break;
-                case PACKET_PLAYER_READY_ID:
-                    process_player_ready(client, sh_mem);
-                    break;
-                case PACKET_PLAYER_INPUT_ID:
-                    process_player_input(pdata, client, sh_mem);
-                    break;
-                case PACKET_CHECK_STATUS_ID:
-                    process_check_status(client);
-                    break;
-                case PACKET_GAME_TYPE_ID:
-                    process_game_type(pdata, client, sh_mem);
-                    break;
-                default:
-                    printf("Invalid pid (%u)\n", *pid);
-            }
-            *packet_ready = PACKET_READY_FALSE;
-        }
-        else
-            sleep(PACKET_READY_WAIT_TIME);
+    switch (*pid) {
+        case PACKET_JOIN_ID:
+            process_join(pdata, client, sh_mem);
+            break;
+        case PACKET_MESSAGE_ID:
+            process_message_from_client(pdata, client, sh_mem);
+            break;
+        case PACKET_PLAYER_READY_ID:
+            process_player_ready(client, sh_mem);
+            break;
+        case PACKET_PLAYER_INPUT_ID:
+            process_player_input(pdata, client, sh_mem);
+            break;
+        case PACKET_CHECK_STATUS_ID:
+            process_check_status(client);
+            break;
+        case PACKET_GAME_TYPE_ID:
+            process_game_type(pdata, client, sh_mem);
+            break;
+        default:
+            printf("Invalid pid (%u)\n", *pid);
     }
 }
 
@@ -651,9 +614,9 @@ void process_game_type(char *data, client *client, server_shared_memory *sh_mem)
 
 void *send_server_packets(void *arg) {
     /* process thread arguments */
-    server_recv_send_thread_args *srsta = (server_recv_send_thread_args *) arg;
-    client *client = srsta->client;
-    server_shared_memory *sh_mem = srsta->sh_mem;
+    server_send_thread_args *sta = (server_send_thread_args *) arg;
+    client *client = sta->client;
+    server_shared_memory *sh_mem = sta->sh_mem;
 
     /* initialize packet number counter for sent packets */
     uint32_t send_pn = 0;

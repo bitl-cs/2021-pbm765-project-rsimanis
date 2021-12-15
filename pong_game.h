@@ -192,7 +192,7 @@ void init_balls(game_state *gs);
 int should_update_game_state(game_state *gs);
 void update_game_state(game_state *gs);
 void update_player(player *player);
-void update_ball(ball *player);
+void update_ball(ball *player, game_state *gs);
 void end_game(game_state *gs);
 
 /* helpers */

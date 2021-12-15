@@ -18,7 +18,6 @@
 #define CLIENT_STATE_STATISTICS         5                   /* player sees the statistics screen (or error if game finished erroneously*/
 
 typedef struct _server_recv_memory {
-    char packet_ready;
     char packet_buf[PACKET_FROM_CLIENT_MAX_SIZE];
 } server_recv_memory;
 
@@ -30,7 +29,6 @@ typedef struct _server_send_memory {
 } server_send_memory;
 
 typedef struct _client client;  /* forward declaration */
-struct _client;
 typedef struct _lobby {
     clock_t last_update;
     char max_clients;
@@ -59,10 +57,10 @@ typedef struct _server_shared_memory {
     game_state game_states[MAX_GAME_STATES];
 } server_shared_memory;
 
-typedef struct _server_recv_send_thread_args {
+typedef struct _server_send_thread_args {
     client *client;
     server_shared_memory *sh_mem;
-} server_recv_send_thread_args;
+} server_send_thread_args;
 
 
 /* init */
@@ -93,8 +91,7 @@ void process_client(client *client, server_shared_memory *sh_mem);
 void remove_client(client *client, server_shared_memory *sh_mem);
 
 /* packet processing */
-void *receive_client_packets(void *arg);
-
+void receive_client_packets(client *client, server_shared_memory *sh_mem);
 void process_client_packets(client *client, server_shared_memory *sh_mem);
 void process_join(char *data, client *client, server_shared_memory *sh_mem);
 void process_message_from_client(char *data, client *client, server_shared_memory *sh_mem);

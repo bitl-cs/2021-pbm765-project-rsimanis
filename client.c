@@ -23,17 +23,7 @@ int main(int argc, char **argv) {
 
     /* initialize shared memory for client */
     client_shared_memory *sh_mem = get_client_shared_memory();
-    sh_mem->recv_mem.packet_ready = PACKET_READY_FALSE;
     sh_mem->send_mem.packet_ready = PACKET_READY_FALSE;
-
-    /* initialize packet receiving thread */
-    client_recv_thread_args crta;
-    crta.recv_mem = &sh_mem->recv_mem;
-    crta.socket = client_socket;
-    pthread_t receiving_thread_id;
-    if (pthread_create(&receiving_thread_id, NULL, receive_server_packets, (void *) &crta) != 0)
-        return -1;
-    sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
     /* initialize packet sending thread */
     client_send_thread_args csta;
@@ -44,12 +34,11 @@ int main(int argc, char **argv) {
         return -1;
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
 
-    /* FIRST TEST */
+    /* TEST (while there is no front-end) */
     send_join("Raivis", &sh_mem->send_mem);
-    // init_screen(argc, argv);
 
-    /* process already validated incoming packets */
-    process_server_packets(sh_mem);
+    /* validate and process incoming server packets */
+    receive_server_packets(client_socket, sh_mem);
 
     return 0;
 } 

@@ -78,59 +78,16 @@ int should_update_game_state(game_state *gs) {
 }
 
 void update_game_state(game_state *gs) {
-    char i, j;
-    float new_pos_x, new_pos_y;
-    team *t, *scored_team;
-    player *p, *scored_player;
-    ball *b;
-    power_up *pu;
+    char i;
 
     /* update players */
     for (i = 0; i < gs->player_count; i++)
         update_player(&gs->players[i]);
 
-    /* itereate over all balls */
-    for (i = 0; i < gs->ball_count; i++) {
-        b = &gs->balls[i];  
-        update_ball(b);
+    /* update balls */
+    for (i = 0; i < gs->ball_count; i++)
+        update_ball(&gs->balls[i], gs);
 
-        /* check for collision with players */
-        for (j = 0; j < gs->player_count; j++) {
-            p = &gs->players[j];
-            if ((b->pos.y >= p->pos.y) && (b->pos.y <= p->pos.y + p->height) && 
-                (b->pos.x + b->radius >= p->pos.x) && (b->pos.x - b->radius <= p->pos.x + p->width)) {
-                rev_vec2f(&b->v);
-                rev_vec2f(&b->a);
-            }
-        }
-
-        /* check for collision with power-ups */
-        // iterate over all power-ups 
-            // if ball is inside power-up
-                // apply powerup to ball/player based on its type, and remove it from the map
-
-        /* check for colision with team goal lines */
-        for (j = 0; j < gs->team_count; j++) {
-            t = &gs->teams[j];
-            // assuming that goal lines are ALWAYS vertical
-            if (mod_f(b->pos.x - t->goal1.x) <= BALL_COLLISION_DISTANCE) {
-                if (b->last_touched_id != BALL_INITIAL_LAST_TOUCHED_ID) {
-                    scored_player = &gs->players[b->last_touched_id];
-                    scored_team = &gs->teams[scored_player->team_id];
-                    scored_player->score += 1;
-                }
-                else {
-                    /* assuming that there are ALWAYS precisely two teams */
-                    scored_team = (t->id == LEFT_TEAM_ID) ? &gs->teams[RIGHT_TEAM_ID] : &gs->teams[LEFT_TEAM_ID];
-                }
-                scored_team->score += 1;
-                if (is_winning_team(scored_team, gs))
-                    end_game(gs);
-                else
-                    restart_round(gs);
-            }
-        }
-    }
     gs->last_update = clock();
 }
 
@@ -204,10 +161,14 @@ void update_player(player *player) {
         p->y = fin_y;
 }
 
-void update_ball(ball *ball) {
+void update_ball(ball *ball, game_state *gs) {
+    player *player, *scored_player;
+    team *t, *scored_team;
     vec2f *p, *v, *a;
+    power_up *pu;
     float fin_x, fin_y;
     float upper_lim, lower_lim, left_lim, right_lim;
+    char i;
 
     p = &ball->pos;
     v = &ball->v;
@@ -220,8 +181,43 @@ void update_ball(ball *ball) {
 
     update_velocity(v, a, BALL_MAX_VELOCITY_MOD);
 
-    /* update x coordinate */
     fin_x = p->x + v->x;
+    fin_y = p->y + v->y;
+
+    // check for collisions with players
+    for (i = 0; i < gs->player_count; i++) {
+        player = &gs->players[i];
+        if ((fin_x + ball->radius >= player->pos.x) && (fin_x - ball->radius <= player->pos.x + player->width) &&
+            (fin_y + ball->radius >= player->pos.y) && (fin_y - ball->radius <= player->pos.y + player->height)) {
+            if (ball->pos.x + ball->radius < player->pos.x) {
+                ball->pos.x = player->pos.x - ball->radius;
+                ball->pos.y = fin_y;
+                ball->v.x *= -1;
+                ball->a.x *= -1;
+            }
+            else if (ball->pos.x - ball->radius > player->pos.x + player->width) {
+                ball->pos.x = player->pos.x + player->width + ball->radius;
+                ball->pos.y = fin_y;
+                ball->v.x *= -1;
+                ball->a.x *= -1;
+            }
+            else if (ball->pos.y + ball->radius < player->pos.y) {
+                ball->pos.x = fin_x;
+                ball->pos.y = player->pos.y - ball->radius;
+                ball->v.y *= -1;
+                ball->a.y *= -1;
+            }
+            else if (ball->pos.y - ball->radius > player->pos.y + player->height) {
+                ball->pos.x = fin_x;
+                ball->pos.y = player->pos.y + player->height + ball->radius;
+                ball->v.y *= -1;
+                ball->a.y *= -1;
+            }
+            goto _UPDATE_BALL_POWER_UPS; /* ball cant hit both a wall and a player in one frame */
+        }
+    }
+
+    /* check for collisions with walls */
     if (fin_x < left_lim) {
         p->x = left_lim;
         v->x *= -1;
@@ -232,12 +228,9 @@ void update_ball(ball *ball) {
         v->x *= -1;
         a->x *= -1;
     }
-    // TODO: check if ball x touches players paddle
     else
-        p->x = fin_x;
+        ball->pos.x = fin_x;
 
-    /* update y coordinate */
-    fin_y = p->y + v->y;
     if (fin_y < upper_lim) {
         p->y = upper_lim;
         v->y *= -1;
@@ -248,9 +241,52 @@ void update_ball(ball *ball) {
         v->y *= -1;
         a->y *= -1;
     }
-    // TODO: check if ball y touches players paddle
     else
-        p->y = fin_y;
+        ball->pos.y = fin_y;
+
+    _UPDATE_BALL_POWER_UPS:
+    /* check for collision with power-ups */
+    if (ball->last_touched_id != BALL_INITIAL_LAST_TOUCHED_ID) {
+        for (i = 0; i < gs->power_up_count; i++) {
+            pu = &gs->power_ups[i];
+            if ((ball->pos.x + ball->radius >= pu->pos.x) && (ball->pos.x - ball->radius <= pu->pos.x + pu->width) &&
+                (ball->pos.y + ball->radius >= pu->pos.y) && (ball->pos.y - ball->radius <= pu->pos.y + pu->height)) {
+                switch (pu->type) {
+                    case POWER_UP_TYPE_ACCELERATION:
+                        /* accelerate ball until it hits enemy's paddle */
+                        break;
+                    case POWER_UP_TYPE_PADDLE_HEIGHT:
+                        /* increase the height of the player who last hit the ball */
+                        break;
+                    /* might add more */
+                    default:
+                        printf("Invalid power_up type (%d)\n", pu->type);
+                }
+            }
+        }
+    }
+
+    /* check for colision with team goal lines */
+    for (i = 0; i < gs->team_count; i++) {
+        t = &gs->teams[i];
+        // !!! assuming that goal lines are ALWAYS vertical !!!
+        if (mod_f(ball->pos.x - t->goal1.x) <= ball->radius) {
+            if (ball->last_touched_id != BALL_INITIAL_LAST_TOUCHED_ID) {
+                scored_player = &gs->players[ball->last_touched_id];
+                scored_team = &gs->teams[scored_player->team_id];
+                scored_player->score += 1;
+            }
+            else {
+                /* !!! assuming that there are ALWAYS precisely two teams !!! */
+                scored_team = (t->id == LEFT_TEAM_ID) ? &gs->teams[RIGHT_TEAM_ID] : &gs->teams[LEFT_TEAM_ID];
+            }
+            scored_team->score += 1;
+            if (is_winning_team(scored_team, gs))
+                end_game(gs);
+            else
+                restart_round(gs);
+        }
+    }
 }
 
 int is_winning_team(team *team, game_state *gs) {
