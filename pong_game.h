@@ -8,25 +8,27 @@
 #define GAME_READY_UPDATE_INTERVAL          1/30.0
 #define GAME_STATE_UPDATE_INTERVAL          1/60.0      /* time interval (in seconds) between two game state updates */
 
-#define GAME_RESTART_WAIT_TIME              4
+#define GAME_RESTART_WAIT_TIME              0
 
 /* general */
 #define MAX_NAME_SIZE                       20          /* max client username size (19 chars + 1 null byte) */
 #define MAX_MESSAGE_SIZE                    256         /* max message size that can be sent (255 chars + 1 null byte) */
 
-#define GAME_STATE_STATUS_FREE              -4          /* game state memory is not occupied */
-#define GAME_STATE_STATUS_TAKEN             -3          /* game state memory is occupied */
-#define GAME_STATE_STATUS_IN_PROGRESS       -2          /* game state memory is occupied and the game is happening right now */
-#define GAME_STATE_STATUS_LOADING           -1          /* game state memory is occupied and clients are currently loading the game screen */
-#define GAME_STATE_STATUS_ERROR             0           /* game state memory is occupied and the game has finished with an error */
-#define GAME_STATE_STATUS_SUCCESS           1           /* game state memory is occupied and the game has finished without an error */
+#define GAME_STATE_STATUS_FREE              -5          /* game state memory is not occupied */
+#define GAME_STATE_STATUS_TAKEN             -4          /* game state memory is occupied */
+#define GAME_STATE_STATUS_LOADING           -3          /* clients are currently loading the game screen */
+#define GAME_STATE_STATUS_IN_PROGRESS       -2          /* the game is happening right now */
+#define GAME_STATE_STATUS_STATISTICS        -1           /* players are notified with statistics, and the server is waiting when they will exit statistics screen */
+#define GAME_STATE_STATUS_SUCCESS            0           /* the game has finished with an error */
+#define GAME_STATE_STATUS_CLIENT_DISCON      1           /* the game has finished without an error */
+#define GAME_STATE_STATUS_CLIENT_ERROR       2
 
 #define GAME_TYPE_1V1                       1
 #define GAME_TYPE_2V2                       2
 
 /* window */
-#define WINDOW_WIDTH                        800         /* game screen width (in pixels) */
-#define WINDOW_HEIGHT                       600         /* game screen height (in pixels) */
+#define GAME_WINDOW_WIDTH                   800         /* game screen width (in pixels) */
+#define GAME_WINDOW_HEIGHT                  600         /* game screen height (in pixels) */
 
 /* teams */
 #define MAX_TEAM_COUNT                      2           /* max teams in a single match */
@@ -42,12 +44,12 @@
 #define LEFT_GOAL_LINE_UPPER_X              0
 #define LEFT_GOAL_LINE_UPPER_Y              0
 #define LEFT_GOAL_LINE_BOTTOM_X             0
-#define LEFT_GOAL_LINE_BOTTOM_Y             WINDOW_HEIGHT 
+#define LEFT_GOAL_LINE_BOTTOM_Y             GAME_WINDOW_HEIGHT 
 
-#define RIGHT_GOAL_LINE_UPPER_X             WINDOW_WIDTH 
+#define RIGHT_GOAL_LINE_UPPER_X             GAME_WINDOW_WIDTH 
 #define RIGHT_GOAL_LINE_UPPER_Y             0
-#define RIGHT_GOAL_LINE_BOTTOM_X            WINDOW_WIDTH 
-#define RIGHT_GOAL_LINE_BOTTOM_Y            WINDOW_HEIGHT 
+#define RIGHT_GOAL_LINE_BOTTOM_X            GAME_WINDOW_WIDTH 
+#define RIGHT_GOAL_LINE_BOTTOM_Y            GAME_WINDOW_HEIGHT 
 
 /* players */
 #define MAX_PLAYER_COUNT                    4           /* max players in a single match */
@@ -58,6 +60,8 @@
 #define PLAYER_INITIAL_HEIGHT               100
         
 #define PLAYER_INITIAL_SCORE                0
+
+#define PLAYER_DISCONNECTED_CLIENT_ID       -1
 
 #define LEFT_BACK_PLAYER_ID                 0
 #define RIGHT_BACK_PLAYER_ID                1
@@ -72,12 +76,12 @@
 
 #define LEFT_FRONT_PLAYER_INITIAL_X         FRONT_PLAYER_DIST_FROM_GOAL_LINE
 #define LEFT_FRONT_PLAYER_INITIAL_Y         50
-#define RIGHT_FRONT_PLAYER_INITIAL_X        (WINDOW_WIDTH - FRONT_PLAYER_DIST_FROM_GOAL_LINE)
-#define RIGHT_FRONT_PLAYER_INITIAL_Y        (WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y)
+#define RIGHT_FRONT_PLAYER_INITIAL_X        (GAME_WINDOW_WIDTH - FRONT_PLAYER_DIST_FROM_GOAL_LINE)
+#define RIGHT_FRONT_PLAYER_INITIAL_Y        (GAME_WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y)
 
 #define LEFT_BACK_PLAYER_INITIAL_X          BACK_PLAYER_DIST_FROM_GOAL_LINE
-#define LEFT_BACK_PLAYER_INITIAL_Y          (WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y) 
-#define RIGHT_BACK_PLAYER_INITIAL_X         (WINDOW_WIDTH - FRONT_PLAYER_DIST_FROM_GOAL_LINE)
+#define LEFT_BACK_PLAYER_INITIAL_Y          (GAME_WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y) 
+#define RIGHT_BACK_PLAYER_INITIAL_X         (GAME_WINDOW_WIDTH - FRONT_PLAYER_DIST_FROM_GOAL_LINE)
 #define RIGHT_BACK_PLAYER_INITIAL_Y         LEFT_FRONT_PLAYER_INITIAL_Y
 
 #define PLAYER_INITIAL_VELOCITY_X           0
@@ -97,8 +101,8 @@
 
 #define BALL_COLLISION_DISTANCE             20
 
-#define BALL_INITIAL_X                      WINDOW_WIDTH / 2.0
-#define BALL_INITIAL_Y                      WINDOW_HEIGHT / 2.0
+#define BALL_INITIAL_X                      GAME_WINDOW_WIDTH / 2.0
+#define BALL_INITIAL_Y                      GAME_WINDOW_HEIGHT / 2.0
 
 #define BALL_INITIAL_VELOCITY_MOD           20
 #define BALL_MAX_VELOCITY_MOD               50 
@@ -189,7 +193,6 @@ void init_ball_velocity(ball *ball);
 void init_balls(game_state *gs);
 
 /* gameloop */
-int should_update_game_state(game_state *gs);
 void update_game_state(game_state *gs);
 void update_player(player *player);
 void update_ball(ball *player, game_state *gs);
@@ -198,13 +201,15 @@ void end_game(game_state *gs);
 /* helpers */
 // player *find_player_by_id(char player_id, game_state *gs);
 void restart_round(game_state *gs);
-int is_everyone_ready(game_state *gs);
+int all_players_ready(game_state *gs);
+int all_players_disconnected(game_state *gs);
 int is_colliding(ball *ball, player *player);
 void update_velocity(vec2f *v, vec2f *a, float max_v_mod);
 int is_winning_team(team *team, game_state *gs);
 void reset_back_players(game_state *gs);
 void reset_front_players(game_state *gs);
 void reset_power_ups(game_state *gs);
+double time_diff_in_seconds(clock_t t1, clock_t t2);
 
 /* debug */
 void print_team(team *team);

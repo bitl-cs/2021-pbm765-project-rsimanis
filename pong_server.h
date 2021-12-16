@@ -10,6 +10,8 @@
 #define CLIENT_ID_TAKEN_FALSE           -1                  /* when client memory is not occupied, its id is set to this value */
 #define LOBBYLOOP_UPDATE_INTERVAL       1/5.0               /* time interval (in seconds) between two lobby updates */
 
+#define STATISTICS_DURATION             3 
+
 #define CLIENT_STATE_JOIN               0                   /* player sees the join screen */
 #define CLIENT_STATE_MENU               1                   /* player sees the main menu (1v1 and 2v2 buttons) */
 #define CLIENT_STATE_LOBBY              2                   /* player sees his/her lobby */
@@ -68,6 +70,7 @@ server_shared_memory *get_server_shared_memory(void);
 void init_server(server_shared_memory *sh_mem);
 void start_network(char *port, server_shared_memory *sh_mem);
 void init_lobby(lobby *lobby, int max_clients);
+void init_client(char id, int socket, client *c);
 
 void init_teams(game_state *gs);
 void init_back_players(game_state *gs, lobby *lobby);
@@ -77,16 +80,21 @@ void init_game_1v1(game_state *gs, lobby *lobby);
 void init_game_2v2(game_state *gs, lobby *lobby);
 
 /* game */
+void gameloop(server_shared_memory *sh_mem);
+void update_game(game_state *gs, server_shared_memory *sh_mem);
 void reset_lobby(lobby *lobby);
 void update_lobby(lobby *lobby, server_shared_memory *sh_mem);
-void gameloop(server_shared_memory *sh_mem);
 void send_game_ready_to_all_players(game_state *gs, server_shared_memory *sh_mem);
 void send_game_state_to_all_players(game_state *gs, server_shared_memory *sh_mem);
+void send_game_statistics_to_all_players(game_state *gs, server_shared_memory *sh_mem);
+void send_return_to_menu_to_all_players(game_state *gs, server_shared_memory *sh_mem);
+void send_return_to_menu_to_player(player *p, server_shared_memory *sh_mem);
 void end_game_for_all_players(game_state *gs, server_shared_memory *sh_mem);
+void finish_game_state(game_state *gs, server_shared_memory *sh_mem);
 
 /* client processing */
 void accept_clients(int server_socket, server_shared_memory *sh_mem);
-client *init_client(server_shared_memory *sh_mem, int socket);
+char get_free_client(int socket, server_shared_memory *sh_mem);
 void process_client(client *client, server_shared_memory *sh_mem);
 void remove_client(client *client, server_shared_memory *sh_mem);
 
@@ -107,11 +115,12 @@ void send_message_from_server(char type, char source_id, char *message, client *
 void send_lobby(client *client);
 void send_game_ready(client *client);
 void send_game_state(client *client);
-void send_game_end(int team_score, client *client);
+void send_game_end(client *client);
 void send_return_to_menu(client *client);
 
 /* helpers */
-game_state *get_free_game_state(server_shared_memory *sh_mem);
+void remove_client_from_game_state(client *client);
+char get_free_game_state(server_shared_memory *sh_mem);
 void add_client_to_lobby(client* client, lobby *lobby);
 int is_alphanum(char *data, size_t datalen);
 

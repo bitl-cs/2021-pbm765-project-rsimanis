@@ -5,10 +5,11 @@
 #include <stdlib.h>
 
 
-void init_list(char *message, lnode **head) {
+void init_list(char message_type, char *message, lnode **head) {
     lnode *h;
 
     h = *head = (lnode *) malloc(sizeof(lnode));
+    h->message_type = message_type;
     strcpy(h->message, message);
     h->next = NULL;
 }
@@ -24,11 +25,11 @@ void pop_front(lnode **head) {
     free(h);
 }
 
-void push_back(char *message, lnode **head) {
+void push_back(char message_type, char *message, lnode **head) {
     lnode *t;
 
     if (*head == NULL) {
-        init_list(message, head);
+        init_list(message_type, message, head);
         return;
     }
 
@@ -37,6 +38,7 @@ void push_back(char *message, lnode **head) {
         t = t->next;
 
     t->next = (lnode *) malloc(sizeof(lnode));
+    t->next->message_type = message_type;
     strcpy(t->next->message, message);
     t->next->next = NULL;
 }

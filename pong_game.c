@@ -59,8 +59,8 @@ void init_power_up(power_up *power_up, float x, float y, float width, float heig
 }
 
 void init_window(game_state *gs) {
-    gs->window_width = WINDOW_WIDTH;
-    gs->window_height = WINDOW_HEIGHT;
+    gs->window_width = GAME_WINDOW_WIDTH;
+    gs->window_height = GAME_WINDOW_HEIGHT;
 }
 
 void start_game(game_state *gs) {
@@ -68,15 +68,6 @@ void start_game(game_state *gs) {
 }
 
 /* gameloop */
-int should_update_game_state(game_state *gs) {
-    clock_t now;
-    double diff;
-
-    now = clock();
-    diff = (double) (now - gs->last_update) / CLOCKS_PER_SEC;
-    return diff >= GAME_STATE_UPDATE_INTERVAL;
-}
-
 void update_game_state(game_state *gs) {
     char i;
 
@@ -87,8 +78,6 @@ void update_game_state(game_state *gs) {
     /* update balls */
     for (i = 0; i < gs->ball_count; i++)
         update_ball(&gs->balls[i], gs);
-
-    gs->last_update = clock();
 }
 
 void init_balls(game_state *gs) {
@@ -137,7 +126,7 @@ void update_player(player *player) {
     a = &player->a;
 
     upper_lim = 0;
-    lower_lim = WINDOW_HEIGHT - player->height;
+    lower_lim = GAME_WINDOW_HEIGHT - player->height;
     // left_lim = 0;
     // right_lim = WINDOW_WIDTH - player->width;
 
@@ -175,9 +164,9 @@ void update_ball(ball *ball, game_state *gs) {
     a = &ball->a;
 
     upper_lim = ball->radius;
-    lower_lim = WINDOW_HEIGHT - ball->radius;
+    lower_lim = GAME_WINDOW_HEIGHT - ball->radius;
     left_lim = ball->radius;
-    right_lim = WINDOW_WIDTH - ball->radius;
+    right_lim = GAME_WINDOW_WIDTH - ball->radius;
 
     update_velocity(v, a, BALL_MAX_VELOCITY_MOD);
 
@@ -213,7 +202,7 @@ void update_ball(ball *ball, game_state *gs) {
                 ball->v.y *= -1;
                 ball->a.y *= -1;
             }
-            goto _UPDATE_BALL_POWER_UPS; /* ball cant hit both a wall and a player in one frame */
+            goto _UPDATE_BALL_POWER_UPS; /* ball cant hit both wall and player in one frame */
         }
     }
 
@@ -360,21 +349,34 @@ void reset_power_ups(game_state *gs) {
 
     for (i = 0; i < gs->power_up_count; i++) {
         pu = &gs->power_ups[i];
-        // reset
+        // TODO: reset
     }
 }
 
-int is_everyone_ready(game_state *gs) {
+int all_players_ready(game_state *gs) {
     char i;
-    player *p;
 
     for (i = 0; i < gs->player_count; i++) {
-        p = &gs->players[i];
-        if (p->ready == PLAYER_READY_FALSE)
+        if (gs->players[i].ready == PLAYER_READY_FALSE)
             return 0;
     }
     return 1;
 }
+
+int all_players_disconnected(game_state *gs) {
+    int i;
+
+    for (i = 0; i < gs->player_count; i++) {
+        if (gs->players[i].client_id != PLAYER_DISCONNECTED_CLIENT_ID)
+            return 0;
+    }
+    return 1;
+}
+
+double time_diff_in_seconds(clock_t t1, clock_t t2) {
+    return (double) (t2 - t1) / CLOCKS_PER_SEC;
+}
+
 
 void print_team(team *team) {
     printf("id: %d\n", team->id);

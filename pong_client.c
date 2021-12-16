@@ -1,7 +1,9 @@
 #include "pong_client.h"
 #include "pong_game.h"
 #include "pong_networking.h"
+#include "graphics.h"
 
+#include <GL/freeglut_std.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -11,6 +13,7 @@
 #include <pthread.h>
 #include <errno.h>
 
+extern render_info rend_info;
 
 /* init */
 /* allocate shared memory for client */
@@ -176,6 +179,7 @@ void process_accept(char *data, client_send_memory *send_mem) {
     send_game_type(GAME_TYPE_1V1, send_mem);
 
     // process
+    // glutKeyboardFunc(NULL);
 }
 
 void process_message_from_server(char *data, client_send_memory *send_mem) {
@@ -188,6 +192,14 @@ void process_message_from_server(char *data, client_send_memory *send_mem) {
     printf("Received MESSAGE, type=%d, source_id=%d, message=%s\n", type, source_id, message);
     
     // process
+    // add to message list
+    if (rend_info.message_list_size == MAX_MESSAGE_LIST_SIZE) {
+        pop_front(&rend_info.message_list_head);
+        rend_info.message_list_size--;
+    }
+    push_back(type, message, &rend_info.message_list_head);
+    rend_info.message_list_size++;
+
 }
 
 void process_lobby(char *data, client_send_memory *send_mem) {
@@ -415,6 +427,63 @@ void process_game_state(char *data, client_send_memory *send_mem) {
 
 void process_game_end(char *data, client_send_memory *send_mem) {
     printf("Received GAME_END\n");
+    char i;
+    char status;
+    int playerTeamScore, gameDuration;
+
+    char team_count;
+    char id;
+    int score;
+    
+    char player_count;
+    char player_id, team_id;
+    int player_score;
+    char *name;
+
+
+    status = *data;
+    printf("status: %d\n", status);
+    data += 1;
+    playerTeamScore = big_endian_to_host_int32_t(*((int32_t *) data));
+    printf("playerTeamScore: %d\n", playerTeamScore);
+    data += 4;
+    gameDuration = big_endian_to_host_int32_t(*((int32_t *) data));
+    printf("gameDuration: %d\n", gameDuration);
+    data += 4;
+
+    team_count = *data;
+    printf("team_count: %d\n", team_count);
+    data += 1;
+    if (status != PACKET_GAME_END_STATUS_ERROR) {
+        for (i = 0; i < team_count; i++) {
+            id = *data;
+            printf("team_id: %d\n", id);
+            data += 1;
+            score = big_endian_to_host_int32_t(*((int32_t *) data));
+            printf("team_score: %d\n", score);
+            data += 4;
+        }
+    }
+
+    player_count = *data;
+    printf("player_count: %d\n", player_count);
+    data += 1;
+    if (status != PACKET_GAME_END_STATUS_ERROR) {
+        for (i = 0; i < player_count; i++) {
+            player_id = *data;
+            printf("player_id: %d\n", player_id);
+            data += 1;
+            team_id = *data;
+            printf("team_id: %d\n", team_id);
+            data += 1;
+            score = big_endian_to_host_int32_t(*((int32_t *) data));
+            printf("player_score: %d\n", score);
+            data += 4;
+            name = data;
+            printf("player_name: %s\n", name);
+            data += MAX_NAME_SIZE;
+        }
+    }
     // draw statistics
 }
 
