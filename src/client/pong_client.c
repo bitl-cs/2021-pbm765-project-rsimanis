@@ -1,7 +1,7 @@
 #include "pong_client.h"
 
 
-extern render_info rend_info;
+render_info rend_info;
 
 /* init */
 /* allocate shared memory for client */

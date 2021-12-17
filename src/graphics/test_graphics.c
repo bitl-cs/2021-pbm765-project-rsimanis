@@ -1,6 +1,6 @@
 #include "pong_graphics.h"
 
-extern render_info rend_info;
+render_info rend_info;
 
 clock_t last_update = 0;
 
@@ -34,7 +34,7 @@ void gameloop(){
 
 int main(int argc, char** argv){
     rend_info.data = NULL;
-    rend_info.state = DRAW_LOBBY;
+    rend_info.state = CLIENT_STATE_LOBBY;
     rend_info.textlen = 0;
     init_list(PACKET_MESSAGE_TYPE_CHAT, "Chat ready...", &rend_info.message_list_head);
     rend_info.message_list_size = 1;

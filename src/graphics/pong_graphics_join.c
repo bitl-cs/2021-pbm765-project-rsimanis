@@ -1,5 +1,6 @@
 #include "pong_graphics_join.h"
 
+extern render_info rend_info;
 
 void render_join(){ // no pointer to data here needed
     /* Play Button Data */
@@ -15,9 +16,9 @@ void render_join(){ // no pointer to data here needed
     render_button(JOIN_BUTTON_X, JOIN_BUTTON_Y, JOIN_BUTTON_WIDTH, JOIN_BUTTON_HEIGHT, JOIN_BUTTON_TEXT);
 
     /*Adding Text Frame */
-    render_outline(text_frame_x, text_frame_y, text_frame_width, text_frame_height, TEXT_FRAME_COLOR);
+    render_outline(text_frame_x, text_frame_y, text_frame_width, text_frame_height, RGB_YELLOW);
 
-    render_string(text_frame_x + text_frame_width / 20, text_frame_y + text_frame_height * 2/ 3, rend_info.input_buf, TEXT_COLOR);
+    render_string(text_frame_x + text_frame_width / 20, text_frame_y + text_frame_height * 2/ 3, rend_info.input_buf, RGB_WHITE);
 }
 
 void join_button_listener(int button, int event, int x, int y){
@@ -28,7 +29,7 @@ void join_button_listener(int button, int event, int x, int y){
                 // close(client_socket);
                 // draw join state
         }
-        if(button_pressed(PLAY_BUTTON_X, PLAY_BUTTON_Y, PLAY_BUTTON_WIDTH, PLAY_BUTTON_HEIGHT, x, y)){
+        if(button_pressed(JOIN_BUTTON_X, JOIN_BUTTON_Y, JOIN_BUTTON_WIDTH, JOIN_BUTTON_HEIGHT, x, y)){
             printf("CLicked JOIN!\n");
 
             /* Send join packet to server */

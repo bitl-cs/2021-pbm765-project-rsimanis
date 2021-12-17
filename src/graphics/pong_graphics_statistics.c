@@ -1,4 +1,5 @@
 #include "pong_graphics_statistics.h"
+#include "../networking/pong_networking.h"
 
 void render_statistics() {
     // quit button

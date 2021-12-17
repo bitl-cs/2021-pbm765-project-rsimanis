@@ -1,7 +1,7 @@
 #include "pong_graphics_general.h"
 #include "../networking/pong_networking.h"
 
-render_info rend_info;
+extern render_info rend_info;
 
 /* Keyboards */
 void type_keyboard(unsigned char key, int x, int y) {
