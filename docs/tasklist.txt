@@ -1,0 +1,11 @@
+-- Main
+teksts virs game type pogam
+Powerups (back-end + front-end)
+Ball color switch based on its type
+Add code to pong_client.c
+
+DEBUG back-end
+
+
+-- Extras
+chat box height for other states than lobby

@@ -1,29 +1,26 @@
-SERVER_MAIN = server.c
-SERVER_EXE = server
+OUT = lib/libgraphics.a
+CC = gcc
+ODIR = obj
+SDIR = src/graphics
+INC = -Iinc
 
-CLIENT_MAIN = client.c
-CLIENT_EXE = client
+_OBJS = a_pong_graphics_game.o \
+		a_pong_graphics_general.o \
+		a_pong_graphics_join.o \
+		a_pong_graphics_lobby.o \
+		a_pong_graphics_menu.o \
+		a_pong_graphics_statistics.o \
+		a_pong_graphics.o \
+OBJS = $(patsubst %,$(ODIR)/%,$(_OBJS))
 
-CFLAGS = -std=gnu90 -fno-common -Wall -Wextra
-LDFLAGS = -lpthread -lGL -lGLU -lglut -lm
 
-CFILES_BOTH = args.c pong_networking.c pong_math.c pong_game.c
-CFILES_SERVER = $(CFILES_BOTH) pong_server.c $(SERVER_MAIN)
-CFILES_CLIENT = $(CFILES_BOTH) pong_client.c message_list.c graphics.c $(CLIENT_MAIN)
+$(ODIR)/%.o: $(SDIR)/%.c 
+    $(CC) -c $(INC) -o $@ $< $(CFLAGS) 
 
-all: $(SERVER_EXE) $(CLIENT_EXE)
-graphics: graphics.exe
-
-$(SERVER_EXE): $(CFILES_SERVER)
-	@gcc $(CFLAGS) $(LDFLAGS) -o $(SERVER_EXE) $(CFILES_SERVER)
-
-$(CLIENT_EXE): $(CFILES_CLIENT)
-	@gcc $(CFLAGS) $(LDFLAGS) -o $(CLIENT_EXE) $(CFILES_CLIENT)
-
-graphics.exe: main.c graphics.c message_list.c
-	gcc -lGL -lGLU -lglut -lm main.c graphics.c message_list.c
+$(OUT): $(OBJS) 
+    ar rvs $(OUT) $^
 
 .PHONY: clean
 
-clean: 
-	rm $(SERVER_EXE) $(CLIENT_EXE)
+clean:
+    rm -f $(ODIR)/*.o $(OUT)
