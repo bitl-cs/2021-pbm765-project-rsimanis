@@ -1,7 +1,13 @@
 #include "pong_client.h"
+#include "../graphics/pong_graphics.h"
+#include "../graphics/pong_graphics_join.h"
+#include "../graphics/pong_graphics_menu.h"
+#include "../graphics/pong_graphics_lobby.h"
+#include "../graphics/pong_graphics_game.h"
+#include "../graphics/pong_graphics_statistics.h"
+#include <GL/freeglut_std.h>
 
-
-render_info rend_info;
+extern render_info rend_info;
 
 /* init */
 /* allocate shared memory for client */
@@ -9,9 +15,106 @@ client_shared_memory *get_client_shared_memory() {
     return mmap(NULL, sizeof(client_shared_memory), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 }
 
+void init_render_info(client_shared_memory *sh_mem) {
+    int i;
+
+    rend_info.client_id = -1;
+    rend_info.data = sh_mem->recv_mem.packet_buf + PACKET_HEADER_SIZE;
+    rend_info.state = STATE_JOIN;
+    rend_info.send_mem = &sh_mem->send_mem;
+    rend_info.input_text_len = 0;
+    rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
+    clear_client_lobby();
+    append_info_message_to_chat("Chat ready...");
+    rend_info.frame_counter = 0;
+    rend_info.last_update = 0;
+}
+
+void init_graphics_window(int argc, char **argv) {
+    glutInit(&argc, argv);
+    glutInitWindowPosition(500, 200);
+    glutInitWindowSize(WINDOW_WIDTH, WINDOW_HEIGHT);
+    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA);
+    glutCreateWindow("Pong++");
+    glMatrixMode(GL_PROJECTION);
+    glutIdleFunc(client_gameloop);
+    glutDisplayFunc(client_render);
+    glutKeyboardFunc(type_keyboard);
+    glutMouseFunc(join_button_listener);
+    glutMainLoop();
+}
+
+/* gameloop */
+void client_gameloop() {
+    clock_t now = clock();
+    double diff = (double)(now - rend_info.last_update) / CLOCKS_PER_SEC;
+    char input;
+
+    if (diff >= CLIENT_GAMELOOP_UPDATE_INTERVAL || rend_info.last_update == 0) {
+        if (rend_info.frame_counter % 3 == 0) { /* assuming that gameloop update internal is equal to 1/60 */
+            input = 0;
+            if (rend_info.keys[0]) {
+                // printf("W is pressed!\n");
+                input += 4;
+                rend_info.keys[0] = 0;
+            }
+            if (rend_info.keys[1]) {
+                // printf("S is pressed!\n");
+                input += 2;
+                rend_info.keys[1] = 0;
+            }
+            if (rend_info.keys[2]) {
+                // printf("Q is pressed!\n");
+                input += 1;
+                rend_info.keys[2] = 0;
+            }
+            // printf("input: %d\n", input);
+            send_player_input(input, rend_info.send_mem);
+        } 
+        glutPostRedisplay();
+        rend_info.frame_counter++;
+        rend_info.last_update = now;
+    }
+}
+
+void client_render() {
+    /* clear buffer */
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    /* if there is something to draw, put it in buffer */
+    switch (rend_info.state) {
+        case STATE_JOIN:
+            render_join();
+            break;
+        case STATE_MENU:
+            render_menu();
+            break;
+        case STATE_LOBBY:
+            render_lobby();
+            break;
+        case STATE_GAME_LOADING:
+            render_game_loading();
+            break;
+        case STATE_GAME:
+            render_game();
+            break;
+        case STATE_STATISTICS:
+            render_statistics();
+            break;
+    }
+    render_chat_message_window();
+
+    /* put graphics on the screen */
+    glutSwapBuffers();
+}
 
 /* packet processing */
-void receive_server_packets(int socket, client_shared_memory *sh_mem) {
+void *receive_server_packets(void *arg) {
+    /* process thread arguments */
+    client_thread_args *cta = (client_thread_args *) arg;
+    client_shared_memory *sh_mem = cta->sh_mem;
+    int socket = cta->socket;
+
     /* initialize packet number counter for received packets */
     uint32_t recv_pn = 0;
 
@@ -77,14 +180,15 @@ void receive_server_packets(int socket, client_shared_memory *sh_mem) {
             exit(-1);
         }
     }
+    return NULL;
 }
 
 /* send packets to server */
 void *send_client_packets(void *arg) {
     /* process thread arguments */
-    client_send_thread_args *csta = (client_send_thread_args *) arg;
-    client_send_memory *send_mem = csta->send_mem;
-    int socket = csta->socket;
+    client_thread_args *cta = (client_thread_args *) arg;
+    client_send_memory *send_mem = &cta->sh_mem->send_mem;
+    int socket = cta->socket;
 
     /* initialize packet number counter for sent packets */
     uint32_t send_pn = 0;
@@ -154,6 +258,9 @@ void process_server_packets(client_shared_memory *sh_mem) {
         case PACKET_RETURN_TO_MENU_ID:
             process_return_to_menu(send_mem);
             break;
+        case PACKET_RETURN_TO_JOIN_ID:
+            process_return_to_join(send_mem);
+            break;
         default:
             printf("Invalid pid (%u)\n", (unsigned) *pid);
     }
@@ -163,11 +270,21 @@ void process_accept(char *data, client_send_memory *send_mem) {
     char status = *data;
     printf("RECEIVED ACCEPT, status=%d\n", status);
 
-    // test
-    send_game_type(GAME_TYPE_1V1, send_mem);
-
-    // process
-    // glutKeyboardFunc(NULL);
+    if (rend_info.state == STATE_JOIN) {
+        if (status >= PACKET_ACCEPT_STATUS_SUCCESS) {
+            clear_input_buffer();
+            clear_chat();
+            append_info_message_to_chat("Successfully joined game");
+            glutKeyboardFunc(NULL);
+            glutMouseFunc(menu_button_listener);
+            rend_info.client_id = status;
+            rend_info.state = STATE_MENU;
+        }
+        else
+            printf("Accept status error (status=%d)\n", status);
+    }
+    else if (rend_info.state != STATE_MENU)
+        printf("process_join: Invalid client state: %d\n", rend_info.state);
 }
 
 void process_message_from_server(char *data, client_send_memory *send_mem) {
@@ -178,243 +295,77 @@ void process_message_from_server(char *data, client_send_memory *send_mem) {
     data_ptr += 1;
     char *message = data_ptr;
     printf("Received MESSAGE, type=%d, source_id=%d, message=%s\n", type, source_id, message);
-    
-    // process
-    // add to message list
-    if (rend_info.message_list_size == MAX_MESSAGE_LIST_SIZE) {
-        pop_front(&rend_info.message_list_head);
-        rend_info.message_list_size--;
-    }
-    push_back(type, message, &rend_info.message_list_head);
-    rend_info.message_list_size++;
 
+    switch (type) {
+        case PACKET_MESSAGE_TYPE_CHAT:
+            append_chat_message_to_chat(source_id, message);
+            break;
+        case PACKET_MESSAGE_TYPE_INFO:
+            append_info_message_to_chat(message);
+            break;
+        case PACKET_MESSAGE_TYPE_ERROR:
+            append_error_message_to_chat(message);
+            break;
+        default:
+            printf("Invalid message type=%d from server\n", type);
+    }    
 }
 
 void process_lobby(char *data, client_send_memory *send_mem) {
     printf("Received LOBBY\n");
-    char i, player_count, player_id, *name;
 
-    player_count = *data;
-    printf("player_count: %d\n", player_count);
-    data += 1;
-    for (i = 0; i < player_count; i++) {
-        player_id = *data;
-        data += 1;
-        name = data;
-        data += MAX_NAME_SIZE;
-        printf("player_id: %d, name=%s\n", player_id, name);
+    if (rend_info.state == STATE_MENU) {
+        clear_chat();
+        append_info_message_to_chat("Successfully joined lobby");
+        glutKeyboardFunc(type_keyboard);
+        glutMouseFunc(lobby_button_listener);
+        rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITH_INPUT_FIELD;
+        rend_info.state = STATE_LOBBY;
+        printf("here\n");
     }
-    // draw lobby
-    // drawLobby(data, ...);
+    else if (rend_info.state != STATE_LOBBY)
+        printf("process_lobby: Invalid client state: %d\n", rend_info.state);
 }
 
 void process_game_ready(char *data, client_send_memory *send_mem) {
     printf("Received GAME_READY\n");
-    int window_width, window_height;
-    char team_count, team_id;
-    float team_goal1X, team_goal1Y;
-    float team_goal2X, team_goal2Y;
-    char player_count;
-    char player_id, ready, player_team_id, *name;
-    float player_initial_X, player_initial_Y;
-    float player_initial_width, player_initial_height;
-    char i;
 
-    // window
-    window_width = big_endian_to_host_int32_t(*((int32_t *) data));
-    printf("window_width: %d\n", window_width);
-    data += 4;
-    window_height = big_endian_to_host_int32_t(*((int32_t *) data));
-    printf("window_height: %d\n", window_height);
-    data += 4;
-
-    // teams
-    team_count = *data;
-    printf("team_count: %d\n", team_count);
-    data += 1;
-    for (i = 0; i < team_count; i++) {
-        team_id = *data;
-        printf("team_id: %d\n", team_id);
-        data += 1;
-        team_goal1X = big_endian_to_host_float(*((float *) data));
-        printf("team_goal1x: %f\n", team_goal1X);
-        data += 4;
-        team_goal1Y = big_endian_to_host_float(*((float *) data));
-        printf("team_goal1y: %f\n", team_goal1Y);
-        data += 4;
-        team_goal2X = big_endian_to_host_float(*((float *) data));
-        printf("team_goal2x: %f\n", team_goal2X);
-        data += 4;
-        team_goal2Y = big_endian_to_host_float(*((float *) data));
-        printf("team_goal2y: %f\n", team_goal2Y);
-        data += 4;
-    } 
-
-    // players
-    player_count = *data;
-    printf("player_count: %d\n", player_count);
-    data += 1;
-    for (i = 0; i < player_count; i++) {
-        player_id = *data;
-        printf("player_id: %d\n", player_id);
-        data += 1;
-        ready = *data;
-        printf("player_ready: %d\n", ready);
-        data += 1;
-        player_team_id = *data;
-        printf("player_team_id: %d\n", player_team_id);
-        data += 1;
-        name = data;
-        printf("player_name: %s\n", name);
-        data += MAX_NAME_SIZE;
-        player_initial_X = big_endian_to_host_float(*((float *) data));
-        printf("player_initial_x: %f\n", player_initial_X);
-        data += 4;
-        player_initial_Y = big_endian_to_host_float(*((float *) data));
-        printf("player_initial_y: %f\n", player_initial_Y);
-        data += 4;
-        player_initial_width = big_endian_to_host_float(*((float *) data));
-        printf("player_initial_width: %f\n", player_initial_width);
-        data += 4;
-        player_initial_height = big_endian_to_host_float(*((float *) data));
-        printf("player_initial_height: %f\n", player_initial_height);
-        data += 4;
+    if (rend_info.state == STATE_LOBBY) {
+        glutKeyboardFunc(NULL);
+        glutMouseFunc(NULL);
+        rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
+        rend_info.state = STATE_GAME_LOADING;
     }
+    else if (rend_info.state != STATE_GAME_LOADING)
+        printf("process_game_ready: Invalid client state: %d\n", rend_info.state);
+
     // initialize game screen
 
-    send_player_ready(0, send_mem);
+    // send_player_ready(0, send_mem);
 }
 
 void process_game_state(char *data, client_send_memory *send_mem) {
     printf("Received GAME_STATE\n");
-    // draw game state
-    int window_width, window_height;
 
-    char team_count;
-    char team_id;
-    int team_score;
-    float team_goal1X, team_goal1Y;
-    float team_goal2X, team_goal2Y;
-
-    char player_count;
-    char player_id, player_team_id;
-    float player_x, player_y;
-    float player_width, player_height;
-
-    char ball_count;
-    float ball_x, ball_y;
-    float ball_radius;
-    char ball_type;
-
-    char power_up_count;
-    char power_up_type;
-    float power_up_x, power_up_y;
-    float power_up_width, power_up_height;
-    char i;
-
-    // window
-    window_width = big_endian_to_host_int32_t(*((int32_t *) data));
-    printf("window_width: %d\n", window_width);
-    data += 4;
-    window_height = big_endian_to_host_int32_t(*((int32_t *) data));
-    printf("window_height: %d\n", window_height);
-    data += 4;
-
-    // teams
-    team_count = *data;
-    printf("team_count: %d\n", team_count);
-    data += 1;
-    for (i = 0; i < team_count; i++) {
-        team_id = *data;
-        printf("team_id: %d\n", team_id);
-        data += 1;
-        team_score = big_endian_to_host_int32_t(*((int32_t *) data));
-        printf("team_score: %d\n", team_score);
-        data += 4;
-        team_goal1X = big_endian_to_host_float(*((float *) data));
-        printf("team_goal1x: %f\n", team_goal1X);
-        data += 4;
-        team_goal1Y = big_endian_to_host_float(*((float *) data));
-        printf("team_goal1y: %f\n", team_goal1Y);
-        data += 4;
-        team_goal2X = big_endian_to_host_float(*((float *) data));
-        printf("team_goal2x: %f\n", team_goal2X);
-        data += 4;
-        team_goal2Y = big_endian_to_host_float(*((float *) data));
-        printf("team_goal2y: %f\n", team_goal2Y);
-        data += 4;
-    } 
-
-    // players
-    player_count = *data;
-    printf("player_count: %d\n", player_count);
-    data += 1;
-    for (i = 0; i < player_count; i++) {
-        player_id = *data;
-        printf("player_id: %d\n", player_id);
-        data += 1;
-        player_team_id = *data;
-        printf("player_team_id: %d\n", player_team_id);
-        data += 1;
-        player_x = big_endian_to_host_float(*((float *) data));
-        printf("player_x: %f\n", player_x);
-        data += 4;
-        player_y = big_endian_to_host_float(*((float *) data));
-        printf("player_y: %f\n", player_y);
-        data += 4;
-        player_width = big_endian_to_host_float(*((float *) data));
-        printf("player_width: %f\n", player_width);
-        data += 4;
-        player_height = big_endian_to_host_float(*((float *) data));
-        printf("player_height: %f\n", player_height);
-        data += 4;
+    if (rend_info.state == STATE_GAME_LOADING) {
+        glutKeyboardFunc(game_keyboard);
+        rend_info.state = STATE_GAME;
     }
+    else if (rend_info.state != STATE_GAME)
+        printf("process_game_state: Invalid client state: %d\n", rend_info.state);
 
-    // balls
-    ball_count = *data;
-    printf("ball_count: %d\n", ball_count);
-    data += 1;
-    for (i = 0; i < ball_count; i++) {
-        ball_x = big_endian_to_host_float(*((float *) data));
-        printf("ball_x: %f\n", ball_x);
-        data += 4;
-        ball_y = big_endian_to_host_float(*((float *) data));
-        printf("ball_y: %f\n", ball_y);
-        data += 4;
-        ball_radius = big_endian_to_host_float(*((float *) data));
-        printf("ball_radius: %f\n", ball_radius);
-        data += 4;
-        ball_type = *data;
-        printf("ball_type: %d\n", ball_type);
-        data += 1;
-    }
-
-    // power_ups
-    power_up_count = *data;
-    printf("power_up_count: %d\n", power_up_count);
-    data += 1;
-    for (i = 0; i < power_up_count; i++) {
-        power_up_type = *data;
-        printf("power_up_type: %d\n", power_up_type);
-        data += 1;
-        power_up_x = big_endian_to_host_float(*((float *) data));
-        printf("power_up_x: %f\n", power_up_x);
-        data += 4;
-        power_up_y = big_endian_to_host_float(*((float *) data));
-        printf("power_up_y: %f\n", power_up_y);
-        data += 4;
-        power_up_width = big_endian_to_host_float(*((float *) data));
-        printf("power_up_width: %f\n", power_up_width);
-        data += 4;
-        power_up_height = big_endian_to_host_float(*((float *) data));
-        printf("power_up_height: %f\n", power_up_height);
-        data += 4;
-    }
-    putchar('\n');
 }
 
 void process_game_end(char *data, client_send_memory *send_mem) {
     printf("Received GAME_END\n");
+
+    if (rend_info.state == STATE_GAME) {
+        glutMouseFunc(statistics_button_listener);
+        glutKeyboardFunc(NULL);
+        rend_info.state = STATE_STATISTICS;
+    }
+    else if (rend_info.state != STATE_STATISTICS)
+        printf("process_game_statistics: Invalid client state: %d\n", rend_info.state);
     char i;
     char status;
     int playerTeamScore, gameDuration;
@@ -469,7 +420,7 @@ void process_game_end(char *data, client_send_memory *send_mem) {
             data += 4;
             name = data;
             printf("player_name: %s\n", name);
-            data += MAX_NAME_SIZE;
+            data += MAX_NAME_LENGTH + 1;
         }
     }
     // draw statistics
@@ -477,8 +428,25 @@ void process_game_end(char *data, client_send_memory *send_mem) {
 
 void process_return_to_menu(client_send_memory *send_mem) {
     printf("Received RETURN_TO_MENU\n");
+    if (rend_info.state == STATE_STATISTICS) {
+        rend_info.state = STATE_MENU;
+    }
     // draw main menu
 }
+
+void process_return_to_join(client_send_memory *send_mem) {
+    printf("Received RETURN_TO_JOIN\n");
+    clear_client_lobby();
+    clear_chat();
+    clear_input_buffer();
+    rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
+    append_info_message_to_chat("Chat ready...");
+    glutKeyboardFunc(type_keyboard);
+    glutMouseFunc(join_button_listener);
+    rend_info.client_id = -1;
+    rend_info.state = STATE_JOIN;
+}
+
 
 
 void send_client_packet(uint32_t pn, int32_t psize, client_send_memory *send_mem, char *buf, char *final_buf, int socket) {
@@ -493,8 +461,8 @@ void send_join(char *name, client_send_memory *send_mem) {
 
     /* check if name is not too long */
     namelen = strlen(name);
-    if (namelen > MAX_NAME_SIZE - 1)
-        namelen = MAX_NAME_SIZE - 1;
+    if (namelen > MAX_NAME_LENGTH)
+        namelen = MAX_NAME_LENGTH;
 
     /* wait until send buffer becomes available */
     while (send_mem->packet_ready == PACKET_READY_TRUE)
@@ -510,8 +478,8 @@ void send_message_from_client(char type, char source_id, char *message, client_s
     size_t mlen, offset;
 
     mlen = strlen(message);
-    if (mlen > MAX_MESSAGE_SIZE - 1)
-        mlen = MAX_MESSAGE_SIZE - 1;
+    if (mlen > MAX_MESSAGE_LENGTH)
+        mlen = MAX_MESSAGE_LENGTH;
 
     while (send_mem->packet_ready == PACKET_READY_TRUE)
         sleep(PACKET_READY_WAIT_TIME);
@@ -553,4 +521,13 @@ void send_game_type(char type, client_send_memory *send_mem) {
     send_mem->pid = PACKET_GAME_TYPE_ID;
     send_mem->datalen = insert_char(type, send_mem->pdata, sizeof(send_mem->pdata), 0);
     send_mem->packet_ready = PACKET_READY_TRUE;
+}
+
+void clear_client_lobby(){
+       /* Setting each players id to -1 */
+    int i;
+    for(i = 0; i < MAX_PLAYER_COUNT; i++){
+        rend_info.client_ids_in_lobby[i] = -1;
+    }
+
 }

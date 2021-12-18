@@ -18,9 +18,9 @@
 
 #define MAX_GAME_STATES                 (MAX_CLIENTS / 2)   /* max number of game states at any moment (this number is achieved if maximum number of clients has connected and everyone plays a 1v1 match) */
 #define CLIENT_ID_TAKEN_FALSE           -1                  /* when client memory is not occupied, its id is set to this value */
-#define LOBBYLOOP_UPDATE_INTERVAL       1/5.0               /* time interval (in seconds) between two lobby updates */
+#define LOBBY_UPDATE_INTERVAL           1/5.0               /* time interval (in seconds) between two lobby updates */
 
-#define STATISTICS_DURATION             3 
+#define STATISTICS_DURATION             20 
 
 #define CLIENT_STATE_JOIN               0                   /* player sees the join screen */
 #define CLIENT_STATE_MENU               1                   /* player sees the main menu (1v1 and 2v2 buttons) */
@@ -45,14 +45,13 @@ typedef struct _lobby {
     clock_t last_update;
     char max_clients;
     char client_count;
-    char client_ids[MAX_PLAYER_COUNT];
     client *clients[MAX_PLAYER_COUNT];
 } lobby;
 
 typedef struct _client {
     char id;
     int socket;
-    char name[MAX_NAME_SIZE];
+    char name[MAX_NAME_LENGTH + 1];
     char state;
     lobby *lobby;
     game_state *game_state;
@@ -94,6 +93,7 @@ void gameloop(server_shared_memory *sh_mem);
 void update_game(game_state *gs, server_shared_memory *sh_mem);
 void reset_lobby(lobby *lobby);
 void update_lobby(lobby *lobby, server_shared_memory *sh_mem);
+void send_lobby_to_all_clients_in_the_lobby(lobby *lobby, server_shared_memory *sh_mem);
 void send_game_ready_to_all_players(game_state *gs, server_shared_memory *sh_mem);
 void send_game_state_to_all_players(game_state *gs, server_shared_memory *sh_mem);
 void send_game_statistics_to_all_players(game_state *gs, server_shared_memory *sh_mem);
@@ -101,12 +101,15 @@ void send_return_to_menu_to_all_players(game_state *gs, server_shared_memory *sh
 void send_return_to_menu_to_player(player *p, server_shared_memory *sh_mem);
 void end_game_for_all_players(game_state *gs, server_shared_memory *sh_mem);
 void finish_game_state(game_state *gs, server_shared_memory *sh_mem);
+void set_all_player_client_status_to_game(game_state *gs, server_shared_memory *sh_mem);
 
 /* client processing */
 void accept_clients(int server_socket, server_shared_memory *sh_mem);
 char get_free_client(int socket, server_shared_memory *sh_mem);
 void process_client(client *client, server_shared_memory *sh_mem);
 void remove_client(client *client, server_shared_memory *sh_mem);
+void reset_client(client *client);
+void remove_client_from_lobby(client *client);
 
 /* packet processing */
 void receive_client_packets(client *client, server_shared_memory *sh_mem);
@@ -127,6 +130,7 @@ void send_game_ready(client *client);
 void send_game_state(client *client);
 void send_game_end(client *client);
 void send_return_to_menu(client *client);
+void send_return_to_join(client *client);
 
 /* helpers */
 void remove_client_from_game_state(client *client);

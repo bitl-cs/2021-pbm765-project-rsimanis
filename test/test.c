@@ -7,7 +7,6 @@
 #include <stdlib.h>
 #include <inttypes.h>
 #include <math.h>
-#include "utils/pong_math.h"
 
 #define PACKET_SEPARATOR "--"
 
@@ -100,7 +99,7 @@ int main() {
     // send_lobby(1, "??????????", 8, 0);
     // send_lobby(1, "abcd", 2, 0);
 
-    // lnode *head;
+    // mnode *head;
     // init_list("pirmais", &head);
     // print_list(head);
     // putchar('\n');
@@ -126,18 +125,6 @@ int main() {
     // print_list(head);
     // putchar('\n');
     // free_list(&head);
-
-    vec2f v;
-    v.x = 3;
-    v.y = 4;
-    print_vec2f(&v);
-    int i;
-    for (i = 0; i < 10; i++) {
-        rand_vec2f(&v, 5);
-        print_vec2f(&v);
-        printf("mag: %f\n", mag_vec2f(&v));
-    }
-    printf("mag: %f\n", mag_vec2f(&v));
     return 0;
 }
 

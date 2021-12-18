@@ -30,7 +30,7 @@ void init_player(player *player, char id, char client_id, char team_id, char *na
 
 void init_ball(ball *ball) {
     ball->pos.x = BALL_INITIAL_X;
-    ball->pos.x = BALL_INITIAL_Y;
+    ball->pos.y = BALL_INITIAL_Y;
     init_ball_velocity(ball);
     ball->a.x = BALL_INITIAL_ACCELERATION_X;
     ball->a.y = BALL_INITIAL_ACCELERATION_Y;
@@ -53,7 +53,7 @@ void init_power_up(power_up *power_up, float x, float y, float width, float heig
     power_up->type = type;
 }
 
-void init_window(game_state *gs) {
+void init_screen(game_state *gs) {
     gs->window_width = GAME_WINDOW_WIDTH;
     gs->window_height = GAME_WINDOW_HEIGHT;
 }

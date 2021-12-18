@@ -4,11 +4,14 @@
 #include <pthread.h>
 #include <unistd.h>
 
+render_info rend_info;
+
 int main(int argc, char **argv) {
     char port[6] = DEFAULT_PORT;
     char host[255] = DEFAULT_IP;
     int client_socket = -1;
 
+    /* get port and host from argv */
     get_port_parameter(argc, argv, port);
     get_host_parameter(argc, argv, host);
 
@@ -23,20 +26,28 @@ int main(int argc, char **argv) {
     client_shared_memory *sh_mem = get_client_shared_memory();
     sh_mem->send_mem.packet_ready = PACKET_READY_FALSE;
 
+    /* initialize thread arguments */
+    client_thread_args cta;
+    cta.sh_mem = sh_mem;
+    cta.socket = client_socket;
+
     /* initialize packet sending thread */
-    client_send_thread_args csta;
-    csta.send_mem = &sh_mem->send_mem;
-    csta.socket = client_socket;
     pthread_t sending_thread_id;
-    if (pthread_create(&sending_thread_id, NULL, send_client_packets, (void *) &csta) != 0)
+    if (pthread_create(&sending_thread_id, NULL, send_client_packets, (void *) &cta) != 0)
         return -1;
-    sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument (recv_thread_args) are initialized */
+    sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument are initialized */
 
-    /* TEST (while there is no front-end) */
-    send_join("Raivis", &sh_mem->send_mem);
+    /* initialize packet receiving thread */
+    pthread_t receiving_thread_id;
+    if (pthread_create(&receiving_thread_id, NULL, receive_server_packets, (void *) &cta) != 0)
+        return -1;
+    sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument are initialized */
 
-    /* validate and process incoming server packets */
-    receive_server_packets(client_socket, sh_mem);
+    /* initialize render info */
+    init_render_info(sh_mem);
+
+    /* initialize graphics thread */
+    init_graphics_window(argc, argv);
 
     return 0;
 } 

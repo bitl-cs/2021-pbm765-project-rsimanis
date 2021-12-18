@@ -7,16 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct _lnode {
+typedef struct _mnode {
     char message_type;
-    char message[MAX_MESSAGE_SIZE];
-    struct _lnode *next;
-} lnode;
+    char message[MAX_NAME_LENGTH + 2 + MAX_MESSAGE_LENGTH + 1];
+    struct _mnode *next;
+} mnode;
 
-void init_list(char message_type, char *message, lnode **head);
-void pop_front(lnode **head);
-void push_back(char message_type, char *message, lnode **head);
-void print_list(lnode *head);
-void free_list(lnode **head);
+void init_list(char message_type, char *message, mnode **head);
+void pop_front(mnode **head);
+void push_back(char message_type, char *message, mnode **head);
+void print_list(mnode *head);
+void free_list(mnode **head);
 
 #endif

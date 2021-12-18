@@ -1,17 +1,17 @@
 #include "message_list.h"
 
 
-void init_list(char message_type, char *message, lnode **head) {
-    lnode *h;
+void init_list(char message_type, char *message, mnode **head) {
+    mnode *h;
 
-    h = *head = (lnode *) malloc(sizeof(lnode));
+    h = *head = (mnode *) malloc(sizeof(mnode));
     h->message_type = message_type;
     strcpy(h->message, message);
     h->next = NULL;
 }
 
-void pop_front(lnode **head) {
-    lnode *h;
+void pop_front(mnode **head) {
+    mnode *h;
     
     h = *head;
     if (h->next != NULL)
@@ -21,8 +21,8 @@ void pop_front(lnode **head) {
     free(h);
 }
 
-void push_back(char message_type, char *message, lnode **head) {
-    lnode *t;
+void push_back(char message_type, char *message, mnode **head) {
+    mnode *t;
 
     if (*head == NULL) {
         init_list(message_type, message, head);
@@ -33,21 +33,21 @@ void push_back(char message_type, char *message, lnode **head) {
     while (t->next != NULL)
         t = t->next;
 
-    t->next = (lnode *) malloc(sizeof(lnode));
+    t->next = (mnode *) malloc(sizeof(mnode));
     t->next->message_type = message_type;
     strcpy(t->next->message, message);
     t->next->next = NULL;
 }
 
-void print_list(lnode *head) {
+void print_list(mnode *head) {
     while (head != NULL) {
         printf("%s\n", head->message);
         head = head->next;
     }
 }
 
-void free_list(lnode **head) {
-    lnode *node, *temp;
+void free_list(mnode **head) {
+    mnode *node, *temp;
 
     node = *head;
     while (node != NULL) {

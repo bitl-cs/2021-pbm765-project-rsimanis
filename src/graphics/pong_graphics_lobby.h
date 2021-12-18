@@ -1,7 +1,7 @@
 #ifndef _PONG_GRAPHICS_LOBBY_H
 #define _PONG_GRAPHICS_LOBBY_H
 
-#include "pong_graphics_general.h"
+#include "pong_graphics.h"
 
 #define LOBBY_NAME_FIELD_LINE_SPACING               55
 #define LOBBY_NAME_FIELD_X                          30

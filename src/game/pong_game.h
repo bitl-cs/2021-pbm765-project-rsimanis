@@ -10,13 +10,14 @@
 
 /* gameloop */
 #define GAME_READY_UPDATE_INTERVAL          1/30.0
-#define GAME_STATE_UPDATE_INTERVAL          1/60.0      /* time interval (in seconds) between two game state updates */
+#define GAME_STATE_UPDATE_INTERVAL          1/100.0      /* time interval (in seconds) between two game state updates */
 
-#define GAME_RESTART_WAIT_TIME              0
+#define GAME_RESTART_WAIT_TIME              2
 
 /* general */
-#define MAX_NAME_SIZE                       20          /* max client username size (19 chars + 1 null byte) */
-#define MAX_MESSAGE_SIZE                    256         /* max message size that can be sent (255 chars + 1 null byte) */
+#define MIN_NAME_LENGTH                     3
+#define MAX_NAME_LENGTH                     19
+#define MAX_MESSAGE_LENGTH                  255         /* max message size that can be sent (255 chars + 1 null byte) */
 
 #define GAME_STATE_STATUS_FREE              -5          /* game state memory is not occupied */
 #define GAME_STATE_STATUS_TAKEN             -4          /* game state memory is occupied */
@@ -60,7 +61,7 @@
 #define GAME_1V1_PLAYER_COUNT               2
 #define GAME_2V2_PLAYER_COUNT               4
 
-#define PLAYER_INITIAL_WIDTH                50
+#define PLAYER_INITIAL_WIDTH                20
 #define PLAYER_INITIAL_HEIGHT               100
         
 #define PLAYER_INITIAL_SCORE                0
@@ -75,26 +76,27 @@
 #define PLAYER_LEFT                         1
 #define PLAYER_RIGHT                        0
 
-#define FRONT_PLAYER_DIST_FROM_GOAL_LINE    250
-#define BACK_PLAYER_DIST_FROM_GOAL_LINE     100
+#define BACK_PLAYER_DIST_FROM_GOAL_LINE     50
+#define FRONT_PLAYER_DIST_FROM_BACK_PLAYER  80
+#define FRONT_PLAYER_DIST_FROM_GOAL_LINE    (BACK_PLAYER_DIST_FROM_GOAL_LINE + FRONT_PLAYER_DIST_FROM_BACK_PLAYER)
 
 #define LEFT_FRONT_PLAYER_INITIAL_X         FRONT_PLAYER_DIST_FROM_GOAL_LINE
 #define LEFT_FRONT_PLAYER_INITIAL_Y         50
-#define RIGHT_FRONT_PLAYER_INITIAL_X        (GAME_WINDOW_WIDTH - FRONT_PLAYER_DIST_FROM_GOAL_LINE)
-#define RIGHT_FRONT_PLAYER_INITIAL_Y        (GAME_WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y)
+#define RIGHT_FRONT_PLAYER_INITIAL_X        (GAME_WINDOW_WIDTH - FRONT_PLAYER_DIST_FROM_GOAL_LINE - PLAYER_INITIAL_WIDTH)
+#define RIGHT_FRONT_PLAYER_INITIAL_Y        (GAME_WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y - PLAYER_INITIAL_HEIGHT)
 
 #define LEFT_BACK_PLAYER_INITIAL_X          BACK_PLAYER_DIST_FROM_GOAL_LINE
-#define LEFT_BACK_PLAYER_INITIAL_Y          (GAME_WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y) 
-#define RIGHT_BACK_PLAYER_INITIAL_X         (GAME_WINDOW_WIDTH - FRONT_PLAYER_DIST_FROM_GOAL_LINE)
+#define LEFT_BACK_PLAYER_INITIAL_Y          (GAME_WINDOW_HEIGHT - LEFT_FRONT_PLAYER_INITIAL_Y - PLAYER_INITIAL_HEIGHT) 
+#define RIGHT_BACK_PLAYER_INITIAL_X         (GAME_WINDOW_WIDTH - BACK_PLAYER_DIST_FROM_GOAL_LINE - PLAYER_INITIAL_WIDTH)
 #define RIGHT_BACK_PLAYER_INITIAL_Y         LEFT_FRONT_PLAYER_INITIAL_Y
 
 #define PLAYER_INITIAL_VELOCITY_X           0
 #define PLAYER_INITIAL_VELOCITY_Y           0
-#define PLAYER_MAX_VELOCITY_MOD             50
+#define PLAYER_MAX_VELOCITY_MOD             10
 
 #define PLAYER_INITIAL_ACCELERATION_X       0
 #define PLAYER_INITIAL_ACCELERATION_Y       0
-#define PLAYER_ACCELERATION_MOD             5
+#define PLAYER_ACCELERATION_MOD             2
 
 #define PLAYER_READY_TRUE                   1           /* player has finished loading the game screen */
 #define PLAYER_READY_FALSE                  0           /* player has not yet finished loading the game screen */
@@ -108,8 +110,8 @@
 #define BALL_INITIAL_X                      GAME_WINDOW_WIDTH / 2.0
 #define BALL_INITIAL_Y                      GAME_WINDOW_HEIGHT / 2.0
 
-#define BALL_INITIAL_VELOCITY_MOD           20
-#define BALL_MAX_VELOCITY_MOD               50 
+#define BALL_INITIAL_VELOCITY_MOD           5
+#define BALL_MAX_VELOCITY_MOD               20 
 
 #define BALL_INITIAL_ACCELERATION_X         0
 #define BALL_INITIAL_ACCELERATION_Y         0
@@ -122,7 +124,7 @@
 #define BALL_TYPE_NORMAL                    0
 #define BALL_TYPE_ACCELERATING              1
 
-#define BALL_INIT_ANGLE_IN_DEGREES          30
+#define BALL_INIT_ANGLE_IN_DEGREES          60
 
 /* power-ups */
 #define MAX_POWER_UP_COUNT                  3           /* max power-ups in a single match */
@@ -186,7 +188,7 @@ typedef struct _game_state {
 } game_state;
 
 /* init */
-void init_window(game_state *gs);
+void init_screen(game_state *gs);
 void init_team(team *team, char id, float goal_x1, float goal_y1, float goal_x2, float goal_y2);
 void init_player(player *player, char id, char client_id, char team_id, char *name, float x, float y);
 void init_ball(ball *ball);

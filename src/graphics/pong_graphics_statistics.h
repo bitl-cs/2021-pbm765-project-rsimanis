@@ -1,7 +1,7 @@
 #ifndef _PONG_GRAPHICS_STATISTICS_H
 #define _PONG_GRAPHICS_STATISTICS_H
 
-#include "pong_graphics_general.h"
+#include "pong_graphics.h"
 
 #define STATISTICS_ERROR_MSG_X                              200
 #define STATISTICS_ERROR_MSG_Y                              (WINDOW_WIDTH / 3)
