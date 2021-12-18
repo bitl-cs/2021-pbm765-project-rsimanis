@@ -81,7 +81,7 @@ void start_network(char *port, server_shared_memory *sh_mem);
 void init_lobby(lobby *lobby, int max_clients);
 void init_client(char id, int socket, client *c);
 
-void init_teams(game_state *gs);
+void init_teams(game_state *gs, int player_count);
 void init_back_players(game_state *gs, lobby *lobby);
 void init_front_players(game_state *gs, lobby *lobby);
 void init_power_ups(game_state *gs);

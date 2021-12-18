@@ -18,17 +18,17 @@ void menu_button_listener(int button, int event, int x, int y){
         if (button_pressed(QUIT_BUTTON_X, QUIT_BUTTON_Y, QUIT_BUTTON_WIDTH, QUIT_BUTTON_HEIGHT, x, y)) {
             printf("QUIT_BUTTON_CLICKED!\n");
             /* Setting "quit" input as pressed */
-            rend_info.keys[2] = 1;
+            inp_data.keys[2] = 1;
         }
         if (button_pressed(ONE_VS_ONE_BUTTON_X, ONE_VS_ONE_BUTTON_Y, GAME_TYPE_BUTON_WIDTH, GAME_TYPE_BUTON_HEIGHT, x, y)) {
             printf("CLicked 1V1!\n");
             /* Send game type packet to server (1v1) */
-            send_game_type(PACKET_GAME_TYPE_TYPE_1V1, rend_info.send_mem);
+            send_game_type(PACKET_GAME_TYPE_TYPE_1V1, rend_data.send_mem);
         } 
         else if (button_pressed(TWO_VS_TWO_BUTTON_X, TWO_VS_TWO_BUTTON_Y, GAME_TYPE_BUTON_WIDTH, GAME_TYPE_BUTON_HEIGHT, x, y)) {
             printf("Clicked 2V2!\n");
             /* Send game type packet to server (2v2) */
-            send_game_type(PACKET_GAME_TYPE_TYPE_2V2, rend_info.send_mem);
+            send_game_type(PACKET_GAME_TYPE_TYPE_2V2, rend_data.send_mem);
         }
     }
 }

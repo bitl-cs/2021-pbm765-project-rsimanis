@@ -19,9 +19,9 @@
 #define STATE_JOIN                              0
 #define STATE_MENU                              1
 #define STATE_LOBBY                             2
-#define STATE_GAME_LOADING                      4
-#define STATE_GAME                              5
-#define STATE_STATISTICS                        6
+#define STATE_GAME_LOADING                      3
+#define STATE_GAME                              4
+#define STATE_STATISTICS                        5
 
 #define CLIENT_GAMELOOP_UPDATE_INTERVAL         1/100.0
 
@@ -49,7 +49,8 @@ typedef struct _client_thread_args {
 
 /* init */
 client_shared_memory *get_client_shared_memory(void);
-void init_render_info(client_shared_memory *sh_mem);
+void init_input_data();
+void init_render_data(client_shared_memory *sh_mem);
 void init_graphics_window(int argc, char **argv);
 
 /* gameloop */

@@ -7,7 +7,8 @@
 #include "../graphics/pong_graphics_statistics.h"
 #include <GL/freeglut_std.h>
 
-extern render_info rend_info;
+extern render_data rend_data;
+extern input_data inp_data;
 
 /* init */
 /* allocate shared memory for client */
@@ -15,19 +16,27 @@ client_shared_memory *get_client_shared_memory() {
     return mmap(NULL, sizeof(client_shared_memory), PROT_READ|PROT_WRITE, MAP_SHARED|MAP_ANONYMOUS, -1, 0);
 }
 
-void init_render_info(client_shared_memory *sh_mem) {
+void init_input_data() {
     int i;
 
-    rend_info.client_id = -1;
-    rend_info.data = sh_mem->recv_mem.packet_buf + PACKET_HEADER_SIZE;
-    rend_info.state = STATE_JOIN;
-    rend_info.send_mem = &sh_mem->send_mem;
-    rend_info.input_text_len = 0;
-    rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
+    inp_data.input_buf[0] = '\0';
+    inp_data.input_text_len = 0;
+    for (i = 0; i < MAX_KEYS; i++)
+        inp_data.keys[i] = 0;
+}
+
+void init_render_data(client_shared_memory *sh_mem) {
+    int i;
+
+    rend_data.client_id = -1;
+    rend_data.data = sh_mem->recv_mem.packet_buf + PACKET_HEADER_SIZE;
+    rend_data.state = STATE_JOIN;
+    rend_data.send_mem = &sh_mem->send_mem;
+    rend_data.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
     clear_client_lobby();
     append_info_message_to_chat("Chat ready...");
-    rend_info.frame_counter = 0;
-    rend_info.last_update = 0;
+    rend_data.frame_counter = 0;
+    rend_data.last_update = 0;
 }
 
 void init_graphics_window(int argc, char **argv) {
@@ -47,33 +56,31 @@ void init_graphics_window(int argc, char **argv) {
 /* gameloop */
 void client_gameloop() {
     clock_t now = clock();
-    double diff = (double)(now - rend_info.last_update) / CLOCKS_PER_SEC;
+    double diff = (double)(now - rend_data.last_update) / CLOCKS_PER_SEC;
     char input;
 
-    if (diff >= CLIENT_GAMELOOP_UPDATE_INTERVAL || rend_info.last_update == 0) {
-        if (rend_info.frame_counter % 3 == 0) { /* assuming that gameloop update internal is equal to 1/60 */
+    if (diff >= CLIENT_GAMELOOP_UPDATE_INTERVAL || rend_data.last_update == 0) {
+        if (rend_data.frame_counter % 2 == 0) { /* assuming that gameloop update internal is equal to 1/60 */
             input = 0;
-            if (rend_info.keys[0]) {
+            if (inp_data.keys[KEY_UP_INDEX]) {
                 // printf("W is pressed!\n");
                 input += 4;
-                rend_info.keys[0] = 0;
             }
-            if (rend_info.keys[1]) {
+            if (inp_data.keys[KEY_DOWN_INDEX]) {
                 // printf("S is pressed!\n");
                 input += 2;
-                rend_info.keys[1] = 0;
             }
-            if (rend_info.keys[2]) {
+            if (inp_data.keys[KEY_QUIT_INDEX]) {
                 // printf("Q is pressed!\n");
+                inp_data.keys[KEY_QUIT_INDEX] = KEY_RELEASED;
                 input += 1;
-                rend_info.keys[2] = 0;
             }
             // printf("input: %d\n", input);
-            send_player_input(input, rend_info.send_mem);
+            send_player_input(input, rend_data.send_mem);
         } 
         glutPostRedisplay();
-        rend_info.frame_counter++;
-        rend_info.last_update = now;
+        rend_data.frame_counter++;
+        rend_data.last_update = now;
     }
 }
 
@@ -82,7 +89,7 @@ void client_render() {
     glClear(GL_COLOR_BUFFER_BIT);
 
     /* if there is something to draw, put it in buffer */
-    switch (rend_info.state) {
+    switch (rend_data.state) {
         case STATE_JOIN:
             render_join();
             break;
@@ -270,21 +277,21 @@ void process_accept(char *data, client_send_memory *send_mem) {
     char status = *data;
     printf("RECEIVED ACCEPT, status=%d\n", status);
 
-    if (rend_info.state == STATE_JOIN) {
+    if (rend_data.state == STATE_JOIN) {
         if (status >= PACKET_ACCEPT_STATUS_SUCCESS) {
             clear_input_buffer();
             clear_chat();
             append_info_message_to_chat("Successfully joined game");
             glutKeyboardFunc(NULL);
             glutMouseFunc(menu_button_listener);
-            rend_info.client_id = status;
-            rend_info.state = STATE_MENU;
+            rend_data.client_id = status;
+            rend_data.state = STATE_MENU;
         }
         else
             printf("Accept status error (status=%d)\n", status);
     }
-    else if (rend_info.state != STATE_MENU)
-        printf("process_join: Invalid client state: %d\n", rend_info.state);
+    else if (rend_data.state != STATE_MENU)
+        printf("process_join: Invalid client state: %d\n", rend_data.state);
 }
 
 void process_message_from_server(char *data, client_send_memory *send_mem) {
@@ -314,30 +321,32 @@ void process_message_from_server(char *data, client_send_memory *send_mem) {
 void process_lobby(char *data, client_send_memory *send_mem) {
     printf("Received LOBBY\n");
 
-    if (rend_info.state == STATE_MENU) {
+    if (rend_data.state == STATE_MENU) {
         clear_chat();
         append_info_message_to_chat("Successfully joined lobby");
         glutKeyboardFunc(type_keyboard);
         glutMouseFunc(lobby_button_listener);
-        rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITH_INPUT_FIELD;
-        rend_info.state = STATE_LOBBY;
+        rend_data.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITH_INPUT_FIELD;
+        rend_data.state = STATE_LOBBY;
         printf("here\n");
     }
-    else if (rend_info.state != STATE_LOBBY)
-        printf("process_lobby: Invalid client state: %d\n", rend_info.state);
+    else if (rend_data.state != STATE_LOBBY)
+        printf("process_lobby: Invalid client state: %d\n", rend_data.state);
 }
 
 void process_game_ready(char *data, client_send_memory *send_mem) {
     printf("Received GAME_READY\n");
 
-    if (rend_info.state == STATE_LOBBY) {
+    if (rend_data.state == STATE_LOBBY) {
+        clear_input_buffer();
+        clear_chat();
         glutKeyboardFunc(NULL);
         glutMouseFunc(NULL);
-        rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
-        rend_info.state = STATE_GAME_LOADING;
+        rend_data.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
+        rend_data.state = STATE_GAME_LOADING;
     }
-    else if (rend_info.state != STATE_GAME_LOADING)
-        printf("process_game_ready: Invalid client state: %d\n", rend_info.state);
+    else if (rend_data.state != STATE_GAME_LOADING)
+        printf("process_game_ready: Invalid client state: %d\n", rend_data.state);
 
     // initialize game screen
 
@@ -347,89 +356,44 @@ void process_game_ready(char *data, client_send_memory *send_mem) {
 void process_game_state(char *data, client_send_memory *send_mem) {
     printf("Received GAME_STATE\n");
 
-    if (rend_info.state == STATE_GAME_LOADING) {
-        glutKeyboardFunc(game_keyboard);
-        rend_info.state = STATE_GAME;
+    if (rend_data.state == STATE_GAME_LOADING) {
+        clear_chat();
+        append_info_message_to_chat("Game started");
+        glutKeyboardFunc(game_pressed_keyboard);
+        glutKeyboardUpFunc(game_released_keyboard);
+        glutSpecialFunc(game_special_pressed_keyboard);
+        glutSpecialUpFunc(game_special_released_keyboard);
+        rend_data.state = STATE_GAME;
     }
-    else if (rend_info.state != STATE_GAME)
-        printf("process_game_state: Invalid client state: %d\n", rend_info.state);
+    else if (rend_data.state != STATE_GAME)
+        printf("process_game_state: Invalid client state: %d\n", rend_data.state);
 
 }
 
 void process_game_end(char *data, client_send_memory *send_mem) {
     printf("Received GAME_END\n");
 
-    if (rend_info.state == STATE_GAME) {
+    if (rend_data.state == STATE_GAME) {
+        clear_chat();
         glutMouseFunc(statistics_button_listener);
         glutKeyboardFunc(NULL);
-        rend_info.state = STATE_STATISTICS;
+        glutKeyboardUpFunc(NULL);
+        glutSpecialFunc(NULL);
+        glutSpecialUpFunc(NULL);
+        rend_data.state = STATE_STATISTICS;
     }
-    else if (rend_info.state != STATE_STATISTICS)
-        printf("process_game_statistics: Invalid client state: %d\n", rend_info.state);
-    char i;
-    char status;
-    int playerTeamScore, gameDuration;
-
-    char team_count;
-    char id;
-    int score;
-    
-    char player_count;
-    char player_id, team_id;
-    int player_score;
-    char *name;
-
-
-    status = *data;
-    printf("status: %d\n", status);
-    data += 1;
-    playerTeamScore = big_endian_to_host_int32_t(*((int32_t *) data));
-    printf("playerTeamScore: %d\n", playerTeamScore);
-    data += 4;
-    gameDuration = big_endian_to_host_int32_t(*((int32_t *) data));
-    printf("gameDuration: %d\n", gameDuration);
-    data += 4;
-
-    team_count = *data;
-    printf("team_count: %d\n", team_count);
-    data += 1;
-    if (status != PACKET_GAME_END_STATUS_ERROR) {
-        for (i = 0; i < team_count; i++) {
-            id = *data;
-            printf("team_id: %d\n", id);
-            data += 1;
-            score = big_endian_to_host_int32_t(*((int32_t *) data));
-            printf("team_score: %d\n", score);
-            data += 4;
-        }
-    }
-
-    player_count = *data;
-    printf("player_count: %d\n", player_count);
-    data += 1;
-    if (status != PACKET_GAME_END_STATUS_ERROR) {
-        for (i = 0; i < player_count; i++) {
-            player_id = *data;
-            printf("player_id: %d\n", player_id);
-            data += 1;
-            team_id = *data;
-            printf("team_id: %d\n", team_id);
-            data += 1;
-            score = big_endian_to_host_int32_t(*((int32_t *) data));
-            printf("player_score: %d\n", score);
-            data += 4;
-            name = data;
-            printf("player_name: %s\n", name);
-            data += MAX_NAME_LENGTH + 1;
-        }
-    }
-    // draw statistics
+    else if (rend_data.state != STATE_STATISTICS)
+        printf("process_game_statistics: Invalid client state: %d\n", rend_data.state);
 }
 
 void process_return_to_menu(client_send_memory *send_mem) {
     printf("Received RETURN_TO_MENU\n");
-    if (rend_info.state == STATE_STATISTICS) {
-        rend_info.state = STATE_MENU;
+    if (rend_data.state == STATE_STATISTICS) {
+        clear_input_buffer();
+        clear_chat();
+        glutKeyboardFunc(NULL);
+        glutMouseFunc(menu_button_listener);
+        rend_data.state = STATE_MENU;
     }
     // draw main menu
 }
@@ -439,12 +403,12 @@ void process_return_to_join(client_send_memory *send_mem) {
     clear_client_lobby();
     clear_chat();
     clear_input_buffer();
-    rend_info.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
+    rend_data.max_displayed_message_count = CHAT_DISPLAYED_MESSAGE_COUNT_WITHOUT_INPUT_FIELD;
     append_info_message_to_chat("Chat ready...");
     glutKeyboardFunc(type_keyboard);
     glutMouseFunc(join_button_listener);
-    rend_info.client_id = -1;
-    rend_info.state = STATE_JOIN;
+    rend_data.client_id = -1;
+    rend_data.state = STATE_JOIN;
 }
 
 
@@ -527,7 +491,7 @@ void clear_client_lobby(){
        /* Setting each players id to -1 */
     int i;
     for(i = 0; i < MAX_PLAYER_COUNT; i++){
-        rend_info.client_ids_in_lobby[i] = -1;
+        rend_data.client_ids_in_lobby[i] = -1;
     }
 
 }

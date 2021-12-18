@@ -17,7 +17,7 @@ _LIB_NETWORKING_OBJS = pong_networking.o
 LIB_NETWORKING_OBJS = $(patsubst %,$(ODIR)/networking/%,$(_LIB_NETWORKING_OBJS))
 _LIB_SERVER_OBJS = pong_server.o
 LIB_SERVER_OBJS = $(patsubst %,$(ODIR)/server/%,$(_LIB_SERVER_OBJS))
-_LIB_UTILS_OBJS = args.o message_list.o pong_math.o
+_LIB_UTILS_OBJS = args.o message_list.o pong_math.o debug.o
 LIB_UTILS_OBJS = $(patsubst %,$(ODIR)/utils/%,$(_LIB_UTILS_OBJS))
 
 #all

@@ -4,7 +4,8 @@
 #include <pthread.h>
 #include <unistd.h>
 
-render_info rend_info;
+render_data rend_data;
+input_data inp_data;
 
 int main(int argc, char **argv) {
     char port[6] = DEFAULT_PORT;
@@ -43,8 +44,9 @@ int main(int argc, char **argv) {
         return -1;
     sleep(THREAD_INIT_WAIT_TIME); /* wait until thread's local variables from its argument are initialized */
 
-    /* initialize render info */
-    init_render_info(sh_mem);
+    /* initialize global variables for OpenGL */
+    init_input_data();
+    init_render_data(sh_mem);
 
     /* initialize graphics thread */
     init_graphics_window(argc, argv);

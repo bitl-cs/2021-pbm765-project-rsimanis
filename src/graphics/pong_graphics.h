@@ -17,9 +17,9 @@
 /* RGB Colors */
 #define RGB_WHITE                                           ((RGB) {1.0, 1.0, 1.0})
 #define RGB_BLACK                                           ((RGB) {0.0, 0.0, 0.0})
-#define RGB_RED                                             ((RGB) {1.0, 0.1, 0.1})
-#define RGB_GREEN                                           ((RGB) {0.0, 1.0, 0.0})
-#define RGB_BLUE                                            ((RGB) {0.1, 0.1, 1.0})
+#define RGB_RED                                             ((RGB) {1.0, 0.2353, 0.2353})
+#define RGB_GREEN                                           ((RGB) {0.21961, 0.8471, 0.30588})
+#define RGB_BLUE                                            ((RGB) {0.1451, 0.5529, 0.9618})
 #define RGB_YELLOW                                          ((RGB) {1.0, 1.0, 0.5})                                          
 #define RGB_PURPLE                                          ((RGB) {1.0, 0.0, 1.0})
 
@@ -67,17 +67,26 @@
 #define QUIT_BUTTON_HEIGHT                                  30
 #define QUIT_BUTTON_PADDING                                 10
 
-/* Input Buffer */
+/* Input */
+#define MAX_KEYS                                            3
+#define KEY_PRESSED                                         1
+#define KEY_RELEASED                                        0
+#define KEY_UP_INDEX                                        0
+#define KEY_DOWN_INDEX                                      1
+#define KEY_QUIT_INDEX                                      2
 #define INPUT_TEXT_MAX_LENGTH                               256
 
-typedef struct _render_info {
+typedef struct _input_data {
+    char input_buf[INPUT_TEXT_MAX_LENGTH + 1];
+    int input_text_len;
+    char keys[MAX_KEYS];
+} input_data;
+
+typedef struct _render_data {
     char client_id;
     char state;
     char *data;
     void *send_mem;
-    char input_buf[INPUT_TEXT_MAX_LENGTH + 1];
-    int input_text_len;
-    char keys[3];
     char max_displayed_message_count;
     char message_list_size;
     mnode *message_list_head;
@@ -85,7 +94,7 @@ typedef struct _render_info {
     char client_names_in_lobby[MAX_PLAYER_COUNT][MAX_NAME_LENGTH + 1];
     clock_t last_update;
     int frame_counter;
-} render_info;
+} render_data;
 
 typedef struct _RGB {
     float r;
@@ -93,12 +102,15 @@ typedef struct _RGB {
     float b;
 } RGB;
 
-extern render_info rend_info;
-
+extern render_data rend_data;
+extern input_data inp_data;
 
 /* Keyboards */
 void type_keyboard(unsigned char key, int x, int y);
-void game_keyboard(unsigned char key, int x, int y);
+void game_pressed_keyboard(unsigned char key, int x, int y);
+void game_released_keyboard(unsigned char key, int x, int y);
+void game_special_pressed_keyboard(int key, int x, int y);
+void game_special_released_keyboard(int key, int x, int y);
 
 /* Shapes */
 void render_outline(int x, int y, int width, int height, RGB color);

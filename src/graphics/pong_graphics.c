@@ -1,29 +1,48 @@
 #include "pong_graphics.h"
+#include <GL/freeglut_std.h>
 #include <string.h>
-
-extern render_info rend_info;
 
 /* Keyboards */
 void type_keyboard(unsigned char key, int x, int y) {
     // printf("Pressed key %c\n", key);
-    if (key == '\b' && rend_info.input_text_len > 0)
-        rend_info.input_buf[--rend_info.input_text_len] = '\0';
-    else if (rend_info.input_text_len < INPUT_TEXT_MAX_LENGTH) {
-        rend_info.input_buf[rend_info.input_text_len++] = key;
-        rend_info.input_buf[rend_info.input_text_len] = '\0';
+    if (key == '\b' && inp_data.input_text_len > 0)
+        inp_data.input_buf[--inp_data.input_text_len] = '\0';
+    else if (inp_data.input_text_len < INPUT_TEXT_MAX_LENGTH) {
+        inp_data.input_buf[inp_data.input_text_len++] = key;
+        inp_data.input_buf[inp_data.input_text_len] = '\0';
     }
 }
 
-void game_keyboard(unsigned char key, int x, int y) {
-    if(key == 'w' || key == 'W'){
-        rend_info.keys[0] = 1;
-    }
-    if(key == 's' || key == 'S'){
-        rend_info.keys[1] = 1;
-    }
-    // if(key == 'l' || key == 'L'){
-    //     rend_info.keys[2] = 1;
-    // }
+void game_pressed_keyboard(unsigned char key, int x, int y) {
+    if(key == 'w' || key == 'W')
+        inp_data.keys[KEY_UP_INDEX] = KEY_PRESSED;
+    if(key == 's' || key == 'S')
+        inp_data.keys[KEY_DOWN_INDEX] = KEY_PRESSED;
+    // if(key == 'l' || key == 'L')
+    //     inp_data.keys[KEY_QUIT_INDEX] = KEY_PRESSED;
+}
+
+void game_released_keyboard(unsigned char key, int x, int y) {
+    if(key == 'w' || key == 'W')
+        inp_data.keys[KEY_UP_INDEX] = KEY_RELEASED;
+    if(key == 's' || key == 'S')
+        inp_data.keys[KEY_DOWN_INDEX] = KEY_RELEASED;
+    // if(key == 'l' || key == 'L')
+    //     inp_data.keys[KEY_QUIT_INDEX] = KEY_RELEASED;
+}
+
+void game_special_pressed_keyboard(int key, int x, int y) {
+    if (key == GLUT_KEY_UP)
+        inp_data.keys[KEY_UP_INDEX] = KEY_PRESSED;
+    if (key == GLUT_KEY_DOWN)
+        inp_data.keys[KEY_DOWN_INDEX] = KEY_PRESSED;
+}
+
+void game_special_released_keyboard(int key, int x, int y) {
+    if (key == GLUT_KEY_UP)
+        inp_data.keys[KEY_UP_INDEX] = KEY_RELEASED;
+    if (key == GLUT_KEY_DOWN)
+        inp_data.keys[KEY_DOWN_INDEX] = KEY_RELEASED;
 }
 
 /* Shapes */
@@ -115,13 +134,13 @@ void render_chat_message_window() {
     int i, height;
     mnode *mnode;
 
-    height = (rend_info.max_displayed_message_count == CHAT_DISPLAYED_MESSAGE_COUNT_WITH_INPUT_FIELD) ? 
+    height = (rend_data.max_displayed_message_count == CHAT_DISPLAYED_MESSAGE_COUNT_WITH_INPUT_FIELD) ? 
                                                              CHAT_WINDOW_HEIGHT_WITH_INPUT_FIELD : 
                                                              CHAT_WINDOW_HEIGHT_WITHOUT_INPUT_FIELD;
     render_outline(CHAT_WINDOW_X, CHAT_WINDOW_Y, CHAT_WINDOW_WIDTH, height, CHAT_OUTLINE_COLOR);
 
-    mnode = rend_info.message_list_head;
-    for (i = 0; i < rend_info.message_list_size; i++) { 
+    mnode = rend_data.message_list_head;
+    for (i = 0; i < rend_data.message_list_size; i++) { 
         render_chat_message(mnode, CHAT_MESSAGE_X, CHAT_MESSAGE_INITIAL_Y + i * CHAT_MESSAGE_LINE_SPACING);
         mnode = mnode->next;
     }
@@ -145,31 +164,31 @@ void render_chat_message(mnode *mnode, int x, int y) {
 
 void render_chat_input_field() {
     render_outline(CHAT_INPUT_FIELD_X, CHAT_INPUT_FIELD_Y, CHAT_INPUT_FIELD_WIDTH, CHAT_INPUT_FIELD_HEIGHT, RGB_GREEN);
-    render_string(CHAT_INPUT_FIELD_X + 10, CHAT_INPUT_FIELD_Y + 22, rend_info.input_buf, RGB_WHITE); 
+    render_string(CHAT_INPUT_FIELD_X + 10, CHAT_INPUT_FIELD_Y + 22, inp_data.input_buf, RGB_WHITE); 
 }
 
 void render_input_buffer(int x, int y, int maxlen, RGB color) {
-    if (rend_info.input_text_len > maxlen)
-        render_char_arr(x, y, rend_info.input_buf, maxlen, color);
+    if (inp_data.input_text_len > maxlen)
+        render_char_arr(x, y, inp_data.input_buf, maxlen, color);
     else
-        render_string(x, y, rend_info.input_buf, color);
+        render_string(x, y, inp_data.input_buf, color);
 }
 
 void clear_input_buffer() {
-    rend_info.input_buf[0] = '\0';
-    rend_info.input_text_len = 0;
+    inp_data.input_buf[0] = '\0';
+    inp_data.input_text_len = 0;
 }
 
 void pop_front_message_from_chat() {
-    pop_front(&rend_info.message_list_head);
-    rend_info.message_list_size--;
+    pop_front(&rend_data.message_list_head);
+    rend_data.message_list_size--;
 }
 
 void append_message_to_chat(char type, char *message) {
-    if (rend_info.message_list_size == rend_info.max_displayed_message_count)
+    if (rend_data.message_list_size == rend_data.max_displayed_message_count)
         pop_front_message_from_chat();
-    push_back(type, message, &rend_info.message_list_head);
-    rend_info.message_list_size++;
+    push_back(type, message, &rend_data.message_list_head);
+    rend_data.message_list_size++;
 }
 
 void append_chat_message_to_chat(char source_id, char *message) {
@@ -180,6 +199,7 @@ void append_chat_message_to_chat(char source_id, char *message) {
         printf("Invalid source_id=%d", source_id);
         return;
     }
+    strcpy(message_with_username, rend_data.client_names_in_lobby[match_id_to_index(source_id)]);
     strcat(message_with_username, ": ");
     strcat(message_with_username, message);
 
@@ -200,8 +220,9 @@ int match_id_to_index(char source_id){
     if (source_id < 0)
         return -1;
 
-    for(i = 0; i < MAX_PLAYER_COUNT; i++){
-        if(rend_info.client_ids_in_lobby[i] == source_id) return i;
+    for(i = 0; i < MAX_PLAYER_COUNT; i++) {
+        if(rend_data.client_ids_in_lobby[i] == source_id)
+            return i;
     }
     return -1;
 }
@@ -209,9 +230,9 @@ int match_id_to_index(char source_id){
 void clear_chat() {
     int i;
 
-    for (i = 0; i < rend_info.message_list_size; i++)
-        pop_front(&rend_info.message_list_head);
-    rend_info.message_list_size = 0;
+    for (i = 0; i < rend_data.message_list_size; i++)
+        pop_front(&rend_data.message_list_head);
+    rend_data.message_list_size = 0;
 }
 
 /* Button Handling */
@@ -261,5 +282,5 @@ float ctosl(float coord, char coord_type) {
 
 /* Debug */
 void print_input_buffer() {
-    printf("%s\n", rend_info.input_buf);
+    printf("%s\n", inp_data.input_buf);
 }

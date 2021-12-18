@@ -54,20 +54,20 @@ void reset_lobby(lobby *lobby) {
         lobby->clients[i] = NULL;
 }
 
-void init_teams(game_state *gs) {
+void init_teams(game_state *gs, int player_count) {
     team *left_team, *right_team;
 
     gs->team_count = TEAM_INITIAL_COUNT;
 
     /* initialize left team */
     left_team = &gs->teams[LEFT_TEAM_ID];
-    init_team(left_team, LEFT_TEAM_ID, 
+    init_team(left_team, LEFT_TEAM_ID, player_count, 
                 LEFT_GOAL_LINE_UPPER_X, LEFT_GOAL_LINE_UPPER_Y,
                 LEFT_GOAL_LINE_BOTTOM_X, LEFT_GOAL_LINE_BOTTOM_Y);
 
     /* initialize right team */
     right_team = &gs->teams[RIGHT_TEAM_ID];
-    init_team(right_team, RIGHT_TEAM_ID, 
+    init_team(right_team, RIGHT_TEAM_ID, player_count, 
                 RIGHT_GOAL_LINE_UPPER_X, RIGHT_GOAL_LINE_UPPER_Y,
                 RIGHT_GOAL_LINE_BOTTOM_X, RIGHT_GOAL_LINE_BOTTOM_Y);
 }
@@ -123,7 +123,7 @@ void init_game_1v1(game_state *gs, lobby *lobby) {
 
     gs->game_type = GAME_TYPE_1V1;
     init_screen(gs);
-    init_teams(gs);
+    init_teams(gs, 1);
     gs->player_count = 2;
     init_back_players(gs, lobby); /* in 1v1 game mode, only back players are playing */
     init_balls(gs);
@@ -145,7 +145,7 @@ void init_game_2v2(game_state *gs, lobby *lobby) {
 
     gs->game_type = GAME_TYPE_2V2;
     init_screen(gs);
-    init_teams(gs);
+    init_teams(gs, 2);
     gs->player_count = 4;
     init_back_players(gs, lobby);
     init_front_players(gs, lobby);
@@ -306,10 +306,16 @@ void send_game_statistics_to_all_players(game_state *gs, server_shared_memory *s
         // send game_end
         send_game_end(c);
         if (gs->status > 0) {
-            if (GAME_STATE_STATUS_CLIENT_DISCON)
-                error_msg = "Client disconnected before the game finished loading";
-            else
-                error_msg = "Something went wrong";
+            switch (gs->status) {
+                case GAME_STATE_STATUS_CLIENT_FAILED_TO_LOAD:
+                    error_msg = "Client disconnected before the game finished loading";
+                    break;
+                case GAME_STATE_STATUS_ALL_TEAM_LEFT:
+                    error_msg = "A team left the game";
+                    break;
+                default:
+                    error_msg = "Something went wrong";
+            }
             send_message_from_server(PACKET_MESSAGE_TYPE_ERROR, PACKET_MESSAGE_SOURCE_SERVER, error_msg, c);
         }
     }
@@ -428,9 +434,11 @@ void init_client(char id, int socket, client *c) {
 }
 
 void remove_client(client *client, server_shared_memory *sh_mem) {
-    client->id = CLIENT_ID_TAKEN_FALSE;
-    sh_mem->client_count--;
+    reset_client(client);
     close(client->socket);
+    client->socket = -1;
+    sh_mem->client_count--;
+    client->id = CLIENT_ID_TAKEN_FALSE;
 }
 
 void remove_client_from_lobby(client *client) {
@@ -455,6 +463,31 @@ void remove_client_from_lobby(client *client) {
             break;
         }
     }
+    client->lobby = NULL;
+}
+
+void remove_client_from_game_state(client *client) {
+    game_state *gs;
+    player *p;
+    ball *b;
+    int i;
+
+    p = client->player;
+    gs = client->game_state;
+
+    if (client->game_state == NULL || p == NULL)
+        return;
+
+    p->client_id = PLAYER_DISCONNECTED_CLIENT_ID;
+    gs->teams[p->team_id].active_player_count--;
+    for (i = 0; i < gs->ball_count; i++) {
+        b = &gs->balls[i]; 
+        if (b->last_touched_id == p->id)
+            b->last_touched_id = BALL_INITIAL_LAST_TOUCHED_ID;
+    }
+
+    client->player = NULL;
+    client->game_state = NULL;
 }
 
 void reset_client(client *client) {
@@ -462,8 +495,11 @@ void reset_client(client *client) {
         remove_client_from_lobby(client);
         client->lobby = NULL;
     }
-    client->player = NULL;
-    client->game_state = NULL;
+    if (client->game_state != NULL) {
+        remove_client_from_game_state(client);
+        client->player = NULL;
+        client->game_state = NULL;
+    }
     client->state = CLIENT_STATE_JOIN;
 }
 
@@ -620,7 +656,10 @@ void process_message_from_client(char *data, client *client, server_shared_memor
         }
     }
     else {
-        send_message_from_server(PACKET_MESSAGE_TYPE_CHAT, source_id, message, client);
+        for (i = 0; i < client->lobby->max_clients; i++) {
+            if (client->lobby->clients[i] != NULL && client->lobby->clients[i]->id == target_id)
+                send_message_from_server(PACKET_MESSAGE_TYPE_CHAT, source_id, message, client->lobby->clients[i]);
+        }
     }
 }
 
@@ -651,12 +690,18 @@ void process_player_input(char *data, client *client, server_shared_memory *sh_m
     }
 
     if (client->state == CLIENT_STATE_GAME && client->player != NULL) {
-        if (down && !up)
-            client->player->a.y = PLAYER_ACCELERATION_MOD;
-        else if (up && !down)
+        if (up && !down) {
+            // client->player->should_decelerate = 0;
             client->player->a.y = -PLAYER_ACCELERATION_MOD;
-        else
+        }
+        else if (down && !up) {
+            // client->player->should_decelerate = 0;
+            client->player->a.y = PLAYER_ACCELERATION_MOD;
+        }
+        else {
             client->player->a.y = 0;
+            client->player->v.y *= PLAYER_FRICTION;
+        }
     }
 }
 

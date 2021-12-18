@@ -2,8 +2,9 @@
 
 
 /* init */
-void init_team(team *team, char id, float goal_x1, float goal_y1, float goal_x2, float goal_y2) {
+void init_team(team *team, char id, int active_player_count, float goal_x1, float goal_y1, float goal_x2, float goal_y2) {
     team->id = id;
+    team->active_player_count = active_player_count;
     team->score = TEAM_INITIAL_SCORE;
     team->goal1.x = goal_x1;
     team->goal1.y = goal_y1;
@@ -26,6 +27,8 @@ void init_player(player *player, char id, char client_id, char team_id, char *na
     player->a.y = PLAYER_INITIAL_ACCELERATION_Y;
     player->width = PLAYER_INITIAL_WIDTH;
     player->height = PLAYER_INITIAL_HEIGHT;
+
+    player->should_decelerate = 1;
 }
 
 void init_ball(ball *ball) {
@@ -66,11 +69,24 @@ void start_game(game_state *gs) {
 void update_game_state(game_state *gs) {
     char i;
 
+    /* check if some team has not disconnected */
+    printstr("check team");
+    for (i = 0; i < gs->team_count; i++) {
+        if (gs->teams[i].active_player_count == 0) {
+            end_game(gs, GAME_STATE_STATUS_ALL_TEAM_LEFT);
+            break;
+        }
+    }
+
     /* update players */
-    for (i = 0; i < gs->player_count; i++)
-        update_player(&gs->players[i]);
+    printstr("update player");
+    for (i = 0; i < gs->player_count; i++) {
+        if (gs->players[i].client_id != PLAYER_DISCONNECTED_CLIENT_ID)
+            update_player(&gs->players[i]);
+    }
 
     /* update balls */
+    printstr("update ball");
     for (i = 0; i < gs->ball_count; i++)
         update_ball(&gs->balls[i], gs);
 }
@@ -84,9 +100,9 @@ void init_balls(game_state *gs) {
         init_ball(&gs->balls[i]);
 }
 
-void end_game(game_state *gs) {
+void end_game(game_state *gs, int status) {
     gs->end_time = clock();
-    gs->status = GAME_STATE_STATUS_SUCCESS;
+    gs->status = status;
 }
 
 void restart_round(game_state *gs) {
@@ -101,11 +117,7 @@ void restart_round(game_state *gs) {
 }
 
 void update_velocity(vec2f *v, vec2f *a, float max_v_mod) {
-    float a_mag, v_mag;
-
-    v_mag = mag_vec2f(v);
-    a_mag = mag_vec2f(a);
-    if (v_mag + a_mag <= max_v_mod)
+    if (pow(pow(v->x + a->x, 2) + pow(v->y + a->y, 2), 0.5) <= max_v_mod)
         add_vec2f(v, a);
 }
 
@@ -171,6 +183,8 @@ void update_ball(ball *ball, game_state *gs) {
     // check for collisions with players
     for (i = 0; i < gs->player_count; i++) {
         player = &gs->players[i];
+        if (player->client_id == PLAYER_DISCONNECTED_CLIENT_ID)
+            continue;
         if ((fin_x + ball->radius >= player->pos.x) && (fin_x - ball->radius <= player->pos.x + player->width) &&
             (fin_y + ball->radius >= player->pos.y) && (fin_y - ball->radius <= player->pos.y + player->height)) {
             if (ball->pos.x + ball->radius < player->pos.x) {
@@ -197,6 +211,7 @@ void update_ball(ball *ball, game_state *gs) {
                 ball->v.y *= -1;
                 ball->a.y *= -1;
             }
+            ball->last_touched_id = player->id;
             goto _UPDATE_BALL_POWER_UPS; /* ball cant hit both wall and player in one frame */
         }
     }
@@ -253,6 +268,8 @@ void update_ball(ball *ball, game_state *gs) {
     /* check for colision with team goal lines */
     for (i = 0; i < gs->team_count; i++) {
         t = &gs->teams[i];
+        if (t->active_player_count == 0)
+            continue;
         // !!! assuming that goal lines are ALWAYS vertical !!!
         if (mod_f(ball->pos.x - t->goal1.x) <= ball->radius) {
             if (ball->last_touched_id != BALL_INITIAL_LAST_TOUCHED_ID) {
@@ -266,7 +283,7 @@ void update_ball(ball *ball, game_state *gs) {
             }
             scored_team->score += 1;
             if (is_winning_team(scored_team, gs))
-                end_game(gs);
+                end_game(gs, GAME_STATE_STATUS_SUCCESS);
             else
                 restart_round(gs);
         }

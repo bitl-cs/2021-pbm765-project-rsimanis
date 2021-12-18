@@ -17,7 +17,7 @@ void render_statistics() {
     int player_score;
     char *name;
 
-    data = rend_info.data;
+    data = rend_data.data;
     status = *data;
     if (status == PACKET_GAME_END_STATUS_ERROR) {
         render_string(STATISTICS_ERROR_MSG_X, STATISTICS_ERROR_MSG_Y, "Game ended with error (check chat for more info)", RGB_WHITE);
@@ -101,7 +101,7 @@ void statistics_button_listener(int button, int event, int x, int y){
         if(button_pressed(QUIT_BUTTON_X, QUIT_BUTTON_Y, QUIT_BUTTON_WIDTH, QUIT_BUTTON_HEIGHT, x, y)){
             printf("QUIT_BUTTON_CLICKED!\n");
             /* Setting "quit" input as pressed */
-            rend_info.keys[2] = 1;
+            inp_data.keys[2] = 1;
         }
     }
 }

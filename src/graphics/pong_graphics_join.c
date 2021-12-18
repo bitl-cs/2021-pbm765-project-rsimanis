@@ -17,7 +17,7 @@ void join_button_listener(int button, int event, int x, int y) {
     if (button == GLUT_LEFT_BUTTON && event == GLUT_DOWN) {
         if (button_pressed(JOIN_BUTTON_X, JOIN_BUTTON_Y, JOIN_BUTTON_WIDTH, JOIN_BUTTON_HEIGHT, x, y)) {
             printf("CLicked JOIN!\n");
-            send_join(rend_info.input_buf, rend_info.send_mem);
+            send_join(inp_data.input_buf, rend_data.send_mem);
         }
     }
 }

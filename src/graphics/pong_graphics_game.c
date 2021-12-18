@@ -1,9 +1,10 @@
 #include "pong_graphics_game.h"
 #include "../client/pong_client.h"
 #include "pong_graphics.h"
+#include <GL/freeglut_std.h>
 
 void render_game_loading(){
-    char *data = rend_info.data;
+    char *data = rend_data.data;
     int window_width, window_height;
     char team_count, team_id;
     float team_goal1X, team_goal1Y;
@@ -76,7 +77,7 @@ void render_game_loading(){
 
         render_rectangle(player_initial_X, player_initial_Y, player_initial_width, player_initial_height, GAME_PADDLE_COLOR);
     }
-    send_player_ready(rend_info.client_id, rend_info.send_mem);
+    send_player_ready(rend_data.client_id, rend_data.send_mem);
 
     /* Currently fake data */
     // int pl1x = 30;
@@ -102,7 +103,7 @@ void render_game_loading(){
 }
 
 void render_game() {
-    char *data = rend_info.data;
+    char *data = rend_data.data;
 
     // draw game state
     int window_width, window_height;
