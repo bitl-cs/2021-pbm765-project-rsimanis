@@ -1,4 +1,4 @@
-#include "args.h"
+#include "pong_args.h"
 
 /* assume that mystring won't be more than 256 characters long */
 int str_length(char* mystring)
@@ -97,7 +97,25 @@ void get_arg_name_and_value(char *arg, int len, char *name, char *val) {
 	val[j] = '\0';
 }
 
+int get_argument_by_name(char* name, int argc, char** argv, char* result){
+  int i, len, nlen;
+  char tmp[256] = "";
+  nlen = str_length(name);
+  if(nlen<1) return -1;
 
+  for(i=0;i<argc;i++){
+    len = get_named_argument(i, argc, argv, tmp);
+    if(len == -1) return -1;
+    if(str_find(name, tmp) == 0){
+      if(str_find("=",tmp) == nlen){
+        str_copy(tmp+nlen+1, result);
+        return str_length(result);
+      }
+    }
+
+  }
+  return -1;
+}
 
 
 

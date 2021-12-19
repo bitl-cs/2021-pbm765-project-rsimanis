@@ -1,7 +1,7 @@
 #ifndef _PONG_GRAPHICS_H
 #define _PONG_GRAPHICS_H
 
-#include "../utils/message_list.h"
+#include "../utils/pong_message_list.h"
 #include "../networking/pong_networking.h"
 
 #include <GL/glu.h>
@@ -21,7 +21,7 @@
 #define RGB_GREEN                                           ((RGB) {0.21961, 0.8471, 0.30588})
 #define RGB_BLUE                                            ((RGB) {0.1451, 0.5529, 0.9618})
 #define RGB_YELLOW                                          ((RGB) {1.0, 1.0, 0.5})                                          
-#define RGB_PURPLE                                          ((RGB) {1.0, 0.0, 1.0})
+#define RGB_PURPLE                                          ((RGB) {0.78824, 0.27834, 0.960784})
 
 /* Chat */
 #define CHAT_WINDOW_X                                       CHAT_WINDOW_PADDING                      

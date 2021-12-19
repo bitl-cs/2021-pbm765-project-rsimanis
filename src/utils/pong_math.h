@@ -17,7 +17,10 @@ typedef struct _vec2f {
 
 int mod_i(int x);
 float mod_f(float x);
+float max(float a, float b);
+float min(float a, float b);
 float rand_f();
+float rand_f_max(float float_min, float float_max);
 
 int diff_signs_i(int x, int y);
 int diff_signs_f(float x, float y);
@@ -29,5 +32,6 @@ void mult_vec2f(vec2f *v, float a);
 void rand_vec2f(vec2f *v, float mag);
 void print_vec2f(vec2f *v);
 float angle_with_horizon_vec2f(vec2f *v);
+float angle_with_vertical_vec2f(vec2f *v);
 
 #endif

@@ -3,6 +3,7 @@ ODIR = obj
 SDIR = src
 LDIR = lib
 BDIR = bin
+TDIR = test
 
 CFLAGS = -std=gnu90 -fno-common
 LDFLAGS = -lGL -lGLU -lglut -lm -lpthread
@@ -17,12 +18,15 @@ _LIB_NETWORKING_OBJS = pong_networking.o
 LIB_NETWORKING_OBJS = $(patsubst %,$(ODIR)/networking/%,$(_LIB_NETWORKING_OBJS))
 _LIB_SERVER_OBJS = pong_server.o
 LIB_SERVER_OBJS = $(patsubst %,$(ODIR)/server/%,$(_LIB_SERVER_OBJS))
-_LIB_UTILS_OBJS = args.o message_list.o pong_math.o debug.o
+_LIB_UTILS_OBJS = pong_args.o pong_message_list.o pong_math.o pong_debug.o
 LIB_UTILS_OBJS = $(patsubst %,$(ODIR)/utils/%,$(_LIB_UTILS_OBJS))
 
 #all
 all: client server graphics
 game: client server
+client: client
+server: server
+test: test
 
 # client
 CLIENT_OUT = $(BDIR)/client.exe
@@ -48,6 +52,15 @@ graphics: $(GRAPHICS_OUT)
 $(GRAPHICS_OUT): $(GRAPHICS_OBJS)
 	$(CC) -o $@ $^ $(LDFLAGS)
 
+# test
+TEST_OUT = $(BDIR)/test.exe
+TEST_MAIN_OBJ = $(TDIR)/test.c
+TEST_OBJS = $(LIB_GAME_OBJS) $(LIB_UTILS_OBJS) $(TEST_MAIN_OBJ)
+test: $(TEST_OUT)
+$(TEST_OUT): $(TEST_OBJS)
+	$(CC) -o $@ $^ $(LDFLAGS)
+
+# general object file
 $(ODIR)/%.o: $(SDIR)/%.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 

@@ -2,7 +2,7 @@
 #define _PONG_NETWORKING_H
 
 #include "../game/pong_game.h"
-#include "../utils/args.h"
+#include "../utils/pong_args.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -19,7 +19,7 @@
 
 
 /* general */
-#define MAX_CLIENTS                         5
+#define MAX_CLIENTS                         7
 
 #define PACKET_NUMBER_SIZE                  4 
 #define PACKET_ID_SIZE                      1 
@@ -125,7 +125,6 @@ void send_packet(uint32_t pn, unsigned char pid, int32_t psize, char *data, size
 /* debug */
 void print_bytes(void *start, size_t len);
 void print_bytes_full(void *start, size_t len);
-void here();
 void printint(char *tag, int x);
 void printfloat(char *tag, float x);
 void printstr(char *str);

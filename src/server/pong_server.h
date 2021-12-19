@@ -20,7 +20,7 @@
 #define CLIENT_ID_TAKEN_FALSE           -1                  /* when client memory is not occupied, its id is set to this value */
 #define LOBBY_UPDATE_INTERVAL           1/5.0               /* time interval (in seconds) between two lobby updates */
 
-#define STATISTICS_DURATION             20 
+#define STATISTICS_DURATION             5 
 
 #define CLIENT_STATE_JOIN               0                   /* player sees the join screen */
 #define CLIENT_STATE_MENU               1                   /* player sees the main menu (1v1 and 2v2 buttons) */
@@ -84,7 +84,6 @@ void init_client(char id, int socket, client *c);
 void init_teams(game_state *gs, int player_count);
 void init_back_players(game_state *gs, lobby *lobby);
 void init_front_players(game_state *gs, lobby *lobby);
-void init_power_ups(game_state *gs);
 void init_game_1v1(game_state *gs, lobby *lobby);
 void init_game_2v2(game_state *gs, lobby *lobby);
 

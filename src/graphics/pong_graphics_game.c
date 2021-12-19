@@ -1,5 +1,6 @@
 #include "pong_graphics_game.h"
 #include "../client/pong_client.h"
+#include "../game/pong_game.h"
 #include "pong_graphics.h"
 #include <GL/freeglut_std.h>
 
@@ -130,6 +131,8 @@ void render_game() {
     float power_up_width, power_up_height;
     char i;
 
+    RGB color;
+
     // window
     window_width = big_endian_to_host_int32_t(*((int32_t *) data));
     // printf("window_width: %d\n", window_width);
@@ -214,8 +217,10 @@ void render_game() {
         ball_type = *data;
         // printf("ball_type: %d\n", ball_type);
         data += 1;
+
         /* Rendering each ball */
-        render_circle(ball_x, ball_y, ball_radius, RGB_WHITE);
+        color = (ball_type == BALL_INITIAL_TYPE) ? RGB_WHITE : RGB_PURPLE;
+        render_circle(ball_x, ball_y, ball_radius, color);
     }
 
     // power_ups
@@ -239,6 +244,8 @@ void render_game() {
         // printf("power_up_height: %f\n", power_up_height);
         data += 4;
 
-        render_rectangle(power_up_x, power_up_y, power_up_width, power_up_height, RGB_BLUE);
+        /* Rendering each power up */
+        color = (power_up_type == POWER_UP_TYPE_ACCELERATION) ? RGB_BLUE : RGB_GREEN;
+        render_rectangle(power_up_x, power_up_y, power_up_width, power_up_height, color);
     }
 }

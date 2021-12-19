@@ -27,8 +27,6 @@ void init_player(player *player, char id, char client_id, char team_id, char *na
     player->a.y = PLAYER_INITIAL_ACCELERATION_Y;
     player->width = PLAYER_INITIAL_WIDTH;
     player->height = PLAYER_INITIAL_HEIGHT;
-
-    player->should_decelerate = 1;
 }
 
 void init_ball(ball *ball) {
@@ -37,8 +35,8 @@ void init_ball(ball *ball) {
     init_ball_velocity(ball);
     ball->a.x = BALL_INITIAL_ACCELERATION_X;
     ball->a.y = BALL_INITIAL_ACCELERATION_Y;
-    ball->radius = BALL_INITIAL_RADIUS;
     ball->type = BALL_TYPE_NORMAL;
+    ball->radius = BALL_INITIAL_RADIUS;
     ball->last_touched_id = BALL_INITIAL_LAST_TOUCHED_ID;
 }
 
@@ -70,7 +68,6 @@ void update_game_state(game_state *gs) {
     char i;
 
     /* check if some team has not disconnected */
-    printstr("check team");
     for (i = 0; i < gs->team_count; i++) {
         if (gs->teams[i].active_player_count == 0) {
             end_game(gs, GAME_STATE_STATUS_ALL_TEAM_LEFT);
@@ -79,16 +76,36 @@ void update_game_state(game_state *gs) {
     }
 
     /* update players */
-    printstr("update player");
     for (i = 0; i < gs->player_count; i++) {
         if (gs->players[i].client_id != PLAYER_DISCONNECTED_CLIENT_ID)
-            update_player(&gs->players[i]);
+            update_player(&gs->players[i], gs);
     }
 
     /* update balls */
-    printstr("update ball");
     for (i = 0; i < gs->ball_count; i++)
         update_ball(&gs->balls[i], gs);
+
+    /* update power-ups */
+    for (i = 0; i < MAX_POWER_UP_COUNT; i++)
+        update_power_up(&gs->power_ups[i], gs);
+}
+
+void update_power_up(power_up *pu, game_state *gs) {
+    if (pu->type == -1 && time_diff_in_seconds(pu->last_spawn_time, clock()) >= POWER_UP_SPAWN_TIME) {
+        spawn_power_up(pu);
+        gs->power_up_count++;
+    }
+}
+
+void spawn_power_up(power_up *pu) {
+    float width;
+
+    rand_f_max(POWER_UP_MIN_WIDTH, POWER_UP_MAX_WIDTH);
+    pu->type = (rand_f() < 0) ? POWER_UP_TYPE_ACCELERATION : POWER_UP_TYPE_PADDLE_HEIGHT;
+    pu->width = width;
+    pu->height = width;
+    pu->pos.x = rand_f_max(POWER_UP_MIN_X, POWER_UP_MAX_X);
+    pu->pos.y = rand_f_max(POWER_UP_MIN_Y, POWER_UP_MAX_Y);
 }
 
 void init_balls(game_state *gs) {
@@ -112,7 +129,7 @@ void restart_round(game_state *gs) {
     if (gs->game_type == GAME_TYPE_2V2)
         reset_front_players(gs);
     init_balls(gs);
-    reset_power_ups(gs);
+    init_power_ups(gs);
     sleep(GAME_RESTART_WAIT_TIME);
 }
 
@@ -123,24 +140,19 @@ void update_velocity(vec2f *v, vec2f *a, float max_v_mod) {
 
 /* make sure than nothing goes out of the screen's borders */
 /* maybe in some later implementation player might move on x axis as well */
-void update_player(player *player) {
-    vec2f *p, *v, *a;
+void update_player(player *player, game_state *gs) {
     float fin_x, fin_y;
     float upper_lim, lower_lim, left_lim, right_lim;
-
-    p = &player->pos;
-    v = &player->v;
-    a = &player->a;
 
     upper_lim = 0;
     lower_lim = GAME_WINDOW_HEIGHT - player->height;
     // left_lim = 0;
     // right_lim = WINDOW_WIDTH - player->width;
 
-    update_velocity(v, a, PLAYER_MAX_VELOCITY_MOD);
+    update_velocity(&player->v, &player->a, PLAYER_MAX_VELOCITY_MOD);
 
     // fin_x = p->x + v->x;
-    fin_y = p->y + v->y;
+    fin_y = player->pos.y + player->v.y;
 
     // if (fin_x < left_lim)
     //     p->x = left_lim;
@@ -149,13 +161,156 @@ void update_player(player *player) {
     // else
     //     p->x = fin_x;
 
+    // check for walls
     if (fin_y < upper_lim)
-        p->y = upper_lim;
+        player->pos.y = upper_lim;
     else if (fin_y > lower_lim)
-        p->y = lower_lim;
+        player->pos.y = lower_lim;
     else
-        p->y = fin_y;
+        player->pos.y = fin_y;
 }
+
+int check_for_collision(ball *ball, player *player) {
+    int intersect_top, intersect_bottom, intersect_left, intersect_right;
+    vec2f ball_final_pos = {ball->pos.x + ball->v.x, ball->pos.y + ball->v.y};
+    // vec2f dv = {ball_final_pos.x - ball->pos.x, ball_final_pos.y - ball->pos.y};
+    // double theta = atan(dv.x / dv.y);
+    // ball_final_pos.x += sin(theta) * ball->radius;
+    // ball_final_pos.y += cos(theta) * ball->radius;
+
+    vec2f paddle_top_left_corner = {player->pos.x, player->pos.y};
+    vec2f paddle_top_right_corner = {player->pos.x + player->width, player->pos.y};
+    vec2f paddle_bottom_left_corner = {player->pos.x, player->pos.y + player->height};
+    vec2f paddle_bottom_right_corner = {player->pos.x + player->width, player->pos.y + player->height};
+
+    intersect_top = do_intersect(&ball->pos, &ball_final_pos, &paddle_top_left_corner, &paddle_top_right_corner);
+    intersect_bottom = do_intersect(&ball->pos, &ball_final_pos, &paddle_bottom_left_corner, &paddle_bottom_right_corner);
+    intersect_left = do_intersect(&ball->pos, &ball_final_pos, &paddle_top_left_corner, &paddle_bottom_left_corner);
+    intersect_right = do_intersect(&ball->pos, &ball_final_pos, &paddle_top_right_corner, &paddle_bottom_right_corner);
+    // if instersect top and ball above player => yvel *= (-1)
+    if (intersect_top && ball->pos.y < player->pos.y){
+        ball->a.y *= -1;
+        ball->v.y *= -1;
+        return 1;
+    }
+    if(intersect_right && player->pos.x + player->width < ball->pos.x){
+        ball->a.x *= -1;
+        ball->v.x *= -1;
+        return 1;
+    }
+    if(intersect_bottom && ball->pos.y > player->pos.y + player->width){
+        ball->a.y *= -1;
+        ball->v.y *= -1;
+        return 1;
+    }
+    if(intersect_left && ball->pos.x < player->pos.x){
+        ball->a.x *= -1;
+        ball->v.x *= -1;
+        return 1;
+    }
+
+
+
+    /* ======================================== */
+
+    // if ball x > paddle x + paddle_width and ball x >= paddle x + widthpp
+    // float ball_left_x = ball->pos.x - ball->radius;
+    // float ball_right_x = ball->pos.x + ball->radius;
+    // float ball_upper_y = ball->pos.y - ball->radius;
+    // float ball_lower_y = ball->pos.y + ball->radius;
+
+    // float paddle_left_x = player->pos.x;
+    // float paddle_right_x = player->pos.x + player->width;
+    // float paddle_upper_y = player->pos.y;
+    // float paddle_lower_y = player->pos.y + player->height;
+    
+    // float finx = ball->pos.x + ball->v.x;
+    // float finy = ball->pos.y + ball->v.y;
+
+    /* Checking for colision with player RIGHT SIDE */
+    // if(ball_left_x <= paddle_right_x &&         // ball's left point is left to the paddle's right side or on it
+    //     ball_right_x > paddle_left_x &&         // ball's right point is right to the paddle's left side
+    //     ball_lower_y >= paddle_upper_y &&       // ball's lower point is under player's upper side
+    //     ball_upper_y <= paddle_lower_y){        // ball's upper point is above player's lower side
+
+    //     ball->v.x *= -1;
+    //     ball->a.x *= -1;
+    //     ball->pos.x = paddle_right_x + 2 + ball->radius;
+    //     ball->pos.x += ball->v.x;
+    //     ball->pos.y += ball->v.y;
+    //     // ball->pos.x = player->pos.x + player->width + ball->radius;
+    //     // ball->pos.y = finy;
+    //     // ball->pos.x = paddle_right_x + 2;
+    //     // ball->pos.y = finy;
+    //     return 1;
+    // }
+    // /* Checking for colision with player LEFT SIDE */
+    // if(ball_right_x >= paddle_left_x &&         // ball has touched the left side
+    //     ball_left_x < paddle_right_x &&         // ball is left to right side
+    //     ball_lower_y >= paddle_upper_y &&       // ball is below player top
+    //     ball_upper_y <= paddle_lower_y) {       // ball is above player bottom
+    
+    //     ball->v.x *= -1;
+    //     ball->a.x *= -1;
+    //     ball->pos.x = paddle_left_x - ball->radius - 2;
+    //     ball->pos.x += ball->v.x;
+    //     ball->pos.y += ball->v.y;
+    //     // ball->pos.x = paddle_left_x - ball->radius;
+    //     // ball->pos.y = finy;
+    //     return 1;
+    // }
+    // /* Checking for colision with player TOP */
+    // if(ball_right_x >= paddle_left_x &&                      // ball is NOT left to player
+    //     ball_left_x <= paddle_right_x &&                    // ball is NOT right to player
+    //     ball_lower_y >= paddle_upper_y &&                   // ball is above player
+    //     ball_upper_y < paddle_lower_y){                      // ball is NOT below player
+    
+    //     ball->v.y *= -1;
+    //     ball->a.y *= -1;
+    //     ball->pos.y = player->pos.y - ball->radius - 2;
+    //     ball->pos.x += ball->v.x;
+    //     ball->pos.y += ball->v.y;
+    //     // ball->pos.x = finx;
+    //     // ball->pos.y = paddle_upper_y - ball->radius;
+    //     return 1;
+    // }
+    // /* Checking for colision with player BOTTOM */
+    // if(ball_right_x >= paddle_left_x &&                      // ball is NOT left to player
+    //     ball_left_x <= paddle_right_x &&                     // ball is NOT right to player
+    //     ball_upper_y <= paddle_lower_y &&                    // ball is BELOW player
+    //     ball_lower_y > paddle_upper_y){                      // ball is NOT above player
+
+    //     ball->v.y *= -1;
+    //     ball->a.y *= -1;
+    //     ball->pos.y = player->pos.y + player->height + ball->radius + 2;
+    //     ball->pos.x += ball->v.x;
+    //     ball->pos.y += ball->v.y;
+    //     // ball->pos.x = finx;
+    //     // ball->pos.y = paddle_lower_y + ball->radius;
+    //     return 1; 
+    // } 
+
+
+    return 0;
+}
+
+void init_power_ups(game_state *gs) {
+    gs->power_up_count = POWER_UP_INITIAL_COUNT;
+    power_up *p = &gs->power_ups[0];
+    p->type = (rand_f() < 0) ? POWER_UP_TYPE_ACCELERATION : POWER_UP_TYPE_PADDLE_HEIGHT;
+    float width = rand_f_max(POWER_UP_MIN_WIDTH, POWER_UP_MAX_WIDTH);
+    p->width = width;
+    p->height = width;
+    p->pos.x = rand_f_max(POWER_UP_MIN_X, POWER_UP_MAX_X);
+    p->pos.y = rand_f_max(POWER_UP_MIN_Y, POWER_UP_MAX_Y);
+}
+void add_radius_to_final_pos(vec2f *pos, vec2f *finpos, float radius) {
+    vec2f trajectory = {finpos->x - pos->x, finpos->y - pos->y};
+    double alpha = angle_with_vertical_vec2f(&trajectory) / (2 * M_PI);
+    finpos->x += radius * sin(alpha);
+    finpos->y += radius * cos(alpha);
+}
+
 
 void update_ball(ball *ball, game_state *gs) {
     player *player, *scored_player;
@@ -185,27 +340,29 @@ void update_ball(ball *ball, game_state *gs) {
         player = &gs->players[i];
         if (player->client_id == PLAYER_DISCONNECTED_CLIENT_ID)
             continue;
+        // if (check_for_collision(ball, player))
+        //     goto _UPDATE_BALL_POWER_UPS;
         if ((fin_x + ball->radius >= player->pos.x) && (fin_x - ball->radius <= player->pos.x + player->width) &&
             (fin_y + ball->radius >= player->pos.y) && (fin_y - ball->radius <= player->pos.y + player->height)) {
-            if (ball->pos.x + ball->radius < player->pos.x) {
+            if (ball->pos.x  < player->pos.x) {
                 ball->pos.x = player->pos.x - ball->radius;
                 ball->pos.y = fin_y;
                 ball->v.x *= -1;
                 ball->a.x *= -1;
             }
-            else if (ball->pos.x - ball->radius > player->pos.x + player->width) {
+            else if (ball->pos.x  > player->pos.x + player->width) {
                 ball->pos.x = player->pos.x + player->width + ball->radius;
                 ball->pos.y = fin_y;
                 ball->v.x *= -1;
                 ball->a.x *= -1;
             }
-            else if (ball->pos.y + ball->radius < player->pos.y) {
+            else if (ball->pos.y  < player->pos.y) {
                 ball->pos.x = fin_x;
                 ball->pos.y = player->pos.y - ball->radius;
                 ball->v.y *= -1;
                 ball->a.y *= -1;
             }
-            else if (ball->pos.y - ball->radius > player->pos.y + player->height) {
+            else if (ball->pos.y  > player->pos.y + player->height) {
                 ball->pos.x = fin_x;
                 ball->pos.y = player->pos.y + player->height + ball->radius;
                 ball->v.y *= -1;
@@ -215,7 +372,6 @@ void update_ball(ball *ball, game_state *gs) {
             goto _UPDATE_BALL_POWER_UPS; /* ball cant hit both wall and player in one frame */
         }
     }
-
     /* check for collisions with walls */
     if (fin_x < left_lim) {
         p->x = left_lim;
@@ -253,14 +409,27 @@ void update_ball(ball *ball, game_state *gs) {
                 switch (pu->type) {
                     case POWER_UP_TYPE_ACCELERATION:
                         /* accelerate ball until it hits enemy's paddle */
+                        if (ball->v.x > 0)
+                            ball->a.x = BALL_ACCELERATION_MOD;
+                        else
+                            ball->a.x = -BALL_ACCELERATION_MOD;
+
+                        if (ball->v.y > 0)
+                            ball->a.y = BALL_ACCELERATION_MOD;
+                        else
+                            ball->a.y = -BALL_ACCELERATION_MOD;
                         break;
                     case POWER_UP_TYPE_PADDLE_HEIGHT:
                         /* increase the height of the player who last hit the ball */
+                        gs->players[ball->last_touched_id].height += 50;
                         break;
                     /* might add more */
                     default:
                         printf("Invalid power_up type (%d)\n", pu->type);
                 }
+                // remove power-up
+                gs->power_up_count--;
+                gs->power_ups[i].type = -1;
             }
         }
     }
@@ -390,6 +559,46 @@ double time_diff_in_seconds(clock_t t1, clock_t t2) {
 }
 
 
+int on_segment(vec2f *p, vec2f *q, vec2f *r) {
+    return (q->x <= max(p->x, r->x) && q->x >= min(p->x, r->x) &&
+            q->y <= max(p->y, r->y) && q->y >= min(p->y, r->y));
+}
+
+int orientation(vec2f *p, vec2f *q, vec2f *r) {
+    int val;
+
+    val = (q->y - p->y) * (r->x - q->x) -
+            (q->x - p->x) * (r->y - q->y);
+    if (val == 0)
+        return 0;
+    return (val > 0) ? 1 : 2;
+}
+
+int do_intersect(vec2f *p1, vec2f *q1, vec2f *p2, vec2f *q2) {
+    int o1, o2, o3, o4;
+
+    o1 = orientation(p1, q1, p2);
+    o2 = orientation(p1, q1, q2);
+    o3 = orientation(p2, q2, p1);
+    o4 = orientation(p2, q2, q1);
+
+    if (o1 != o2 && o3 != o4)
+        return 1;
+
+    if (o1 == 0 && on_segment(p1, p2, q1))
+        return 1;
+    if (o2 == 0 && on_segment(p1, q2, q1))
+        return 1;
+    if (o3 == 0 && on_segment(p2, p1, q2))
+        return 1;
+    if (o4 == 0 && on_segment(p2, q1, q2))
+        return 1;
+
+    return 0;
+}
+
+
+
 void print_team(team *team) {
     printf("id: %d\n", team->id);
     printf("score: %d\n", team->score);
@@ -416,7 +625,7 @@ void print_ball(ball *ball) {
     printf("v: (%f, %f)\n", ball->v.x, ball->v.y);
     printf("a: (%f, %f)\n", ball->a.x, ball->a.y);
     printf("radius: %f\n", ball->radius);
-    printf("type: %d\n", ball->type);
+    printf("type: %d\n", ball->power_up->type);
     printf("last_touched_id: %d\n", ball->last_touched_id);
 }
 

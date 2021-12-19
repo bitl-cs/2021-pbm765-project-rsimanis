@@ -4,7 +4,6 @@
 #include "../networking/pong_networking.h"
 #include "../game/pong_game.h"
 #include "../graphics/pong_graphics.h"
-#include "../utils/message_list.h"
 
 #include <stdio.h>
 #include <string.h>

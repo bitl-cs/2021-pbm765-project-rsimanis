@@ -1,4 +1,4 @@
-#include "debug.h"
+#include "pong_debug.h"
 
 void here() {
     printf("here\n");

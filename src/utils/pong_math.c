@@ -9,6 +9,14 @@ float mod_f(float x) {
     return (x < 0) ? -x : x;
 }
 
+float max(float a, float b) {
+    return (a > b) ? a : b;
+}
+
+float min(float a, float b) {
+    return (a < b) ? a : b;
+}
+
 int diff_signs_i(int x, int y) {
     return ((x ^ y) < 0);
 }
@@ -45,6 +53,14 @@ void rand_vec2f(vec2f *v, float mag) {
     mult_vec2f(v, mag);
 }
 
+/* random float in between [0, float_max] */
+float rand_f_max(float float_min, float float_max) {
+    float r = ((float) rand() / (float) RAND_MAX) * float_max; // [0,float_max]
+    if (r < float_min)
+        return float_min;
+    return r;
+}
+
 /* random float in between [-1.0, 1.0] */
 float rand_f() {
     float r;
@@ -66,4 +82,8 @@ void add_vec2f(vec2f *v, vec2f *addv) {
 
 float angle_with_horizon_vec2f(vec2f *v) {
     return mod_f(atan(v->y / v->x) * 180 / M_PI);
+}
+
+float angle_with_vertical_vec2f(vec2f *v) {
+    return 90 - angle_with_horizon_vec2f(v);
 }

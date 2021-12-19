@@ -5,6 +5,7 @@
 #include "../graphics/pong_graphics_lobby.h"
 #include "../graphics/pong_graphics_game.h"
 #include "../graphics/pong_graphics_statistics.h"
+
 #include <GL/freeglut_std.h>
 
 extern render_data rend_data;

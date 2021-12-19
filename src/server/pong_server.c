@@ -107,9 +107,7 @@ void init_front_players(game_state *gs, lobby *lobby) {
 }
 
 
-void init_power_ups(game_state *gs) {
-    gs->power_up_count = POWER_UP_INITIAL_COUNT;
-}
+
 
 void init_game_1v1(game_state *gs, lobby *lobby) {
     if (gs == NULL) {
@@ -288,19 +286,32 @@ void send_game_ready_to_all_players(game_state *gs, server_shared_memory *sh_mem
 
 void send_game_state_to_all_players(game_state *gs, server_shared_memory *sh_mem) {
     char i;
+    player *p;
 
-    for (i = 0; i < gs->player_count; i++)
-        send_game_state(&sh_mem->clients[gs->players[i].client_id]);
+    for (i = 0; i < gs->player_count; i++) {
+        p = &gs->players[i];
+        if (p->client_id != -1)
+            send_game_state(&sh_mem->clients[p->client_id]);
+    }
 }
 
 void send_game_statistics_to_all_players(game_state *gs, server_shared_memory *sh_mem) {
     char i;
+    player *p;
     client *c;
     char *error_msg;
 
+    // if (gs == NULL || sh_mem == NULL)
+    //     return;
+
     // for all players
     for (i = 0; i < gs->player_count; i++) {
-        c = &sh_mem->clients[gs->players[i].client_id];
+        p = &gs->players[i];
+        if (p == NULL || p->client_id == PLAYER_DISCONNECTED_CLIENT_ID)
+            continue;
+        c = &sh_mem->clients[p->client_id];
+        // if (c->id == -1)
+        //     continue;
         c->state = CLIENT_STATE_STATISTICS;
 
         // send game_end
@@ -488,6 +499,8 @@ void remove_client_from_game_state(client *client) {
 
     client->player = NULL;
     client->game_state = NULL;
+
+    printstr("CLIENT FROM GAME STATE REMOVED");
 }
 
 void reset_client(client *client) {

@@ -2,66 +2,104 @@
 
 
 /* initialization */
-int get_port_parameter(int argc, char** argv, char* port){
-    /* This function either leaves the port string as is (Should be set to DEFAULT_PORT), or changes it, if parameter -p=NEWPORT is set */
-    int len, i, count;
-    char buf[512], name[256], val[256];
 
-    count = 0;
-    for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
-        get_arg_name_and_value(buf, len, name, val);
-        if (strcmp(name, "-p") == 0) {
-            count++;
-            if (count > 1) {
-                printf("Too many \"-p\" arguments\n");
-                return -1;
-            }
-            int portnr = atoi(val);
-            if (portnr < 1 || portnr > 65535) {
-                printf("Invalid port (%d)\n", portnr);
-                return -1;
-            }
-            strcpy(port, val);
-        }
-        else {
-            printf("Undefined argument (%s)\n", name);
-            return -1;
-        }
-    }
-    if (count == 0)
-        return -1;
-    return 0;
+int get_port_parameter(int argc, char** argv, char* port){
+  /* This function either leaves the port string as is (Should be set to DEFAULT_PORT), or changes it, if parameter -p=NEWPORT is set */
+  char tmp[256] = "";
+  int plen = -1;
+  printf("  Checking if port parameter (-p=... ) is set..\n");
+ 
+  plen=get_argument_by_name("-p", argc, argv, tmp);
+  if(plen>0) {
+      printf("  Changing default port..\n");
+      if(plen>5) {
+          printf("  New port number is not valid! Exiting...\n");
+          return -1;
+      }
+      str_copy(tmp, port);
+  }
+  return 0;
 }
 
 int get_host_parameter(int argc, char** argv, char* host){
-    /* This function either leaves the host string as is (Should be set to DEFAULT_IP), or changes it, if parameter -h=NEWHOST is set */
-    int len, i, count;
-    char buf[30], name[30], val[30];
-
-    count = 0;
-    for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
-        get_arg_name_and_value(buf, len, name, val);
-        if (strcmp(name, "-a") == 0) {
-            count++;
-            if (count > 1) {
-                printf("Too many \"-a\" arguments\n");
-                return -1;
-            }
-            if (!validate_ip(val)) {
-                printf("Invalid ip (%s)\n", val);
-                return -1;
-            }
-            strcpy(host, val);
-        }
-        else {
-            printf("Undefined argument (%s)\n", name);
-            return -1;
-        }
-    }
-    if (count == 0)
-        return -1;
-    return 0;
+  /* This function either leaves the host string as is (Should be set to DEFAULT_IP), or changes it, if parameter -h=NEWHOST is set */
+  char tmp[256] = "";
+  int plen = -1;
+  printf("  Checking if port parameter (-h=... ) is set..\n");
+ 
+  plen=get_argument_by_name("-h", argc, argv, tmp);
+  if(plen>0) {
+      printf("  Changing default host IP..\n");
+      if(plen>15) {
+          printf("  New host IP is not valid! Exiting...\n");
+          return -1;
+      }
+      str_copy(tmp, host);
+  }
+  return 0;
 }
+// int get_port_parameter(int argc, char** argv, char* port){
+//     /* This function either leaves the port string as is (Should be set to DEFAULT_PORT), or changes it, if parameter -p=NEWPORT is set */
+//     int len, i, count;
+//     char buf[512], name[256], val[256];
+
+//     count = 0;
+//     for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
+//         get_arg_name_and_value(buf, len, name, val);
+//         if (strcmp(name, "-p") == 0) {
+//             count++;
+//             if (count > 1) {
+//                 printf("Too many \"-p\" arguments\n");
+//                 return -1;
+//             }
+//             int portnr = atoi(val);
+//             if (portnr < 1 || portnr > 65535) {
+//                 printf("Invalid port (%d)\n", portnr);
+//                 return -1;
+//             }
+//             printf("port: %s\n", port);
+//             strcpy(port, val);
+//         }
+//         else {
+//             printf("Undefined argument (%s)\n", name);
+//             return -1;
+//         }
+//     }
+//     if (count == 0)
+//         return -1;
+//     return 0;
+// }
+
+// int get_host_parameter(int argc, char** argv, char* host){
+//     /* This function either leaves the host string as is (Should be set to DEFAULT_IP), or changes it, if parameter -h=NEWHOST is set */
+//     int len, i, count;
+//     char buf[30], name[30], val[30];
+
+//     count = 0;
+//     for (i = 0; (len = get_named_argument(i, argc, argv, buf)) != -1; i++) {
+//         get_arg_name_and_value(buf, len, name, val);
+//         if (strcmp(name, "-a") == 0) {
+//             count++;
+//             if (count > 1) {
+//                 printf("Too many \"-a\" arguments\n");
+//                 return -1;
+//             }
+//             // if (!validate_ip(val)) {
+//             //     printf("Invalid ip (%s)\n", val);
+//             //     return -1;
+//             // }
+//             printf("host: %s\n", host);
+//             strcpy(host, val);
+//         }
+//         else {
+//             printf("Undefined argument (%s)\n", name);
+//             return -1;
+//         }
+//     }
+//     if (count == 0)
+//         return -1;
+//     return 0;
+// }
 
 int get_server_socket(char *port){
     int server_socket;

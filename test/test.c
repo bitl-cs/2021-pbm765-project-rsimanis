@@ -1,6 +1,7 @@
 // #include "pong_networking.h"
 // #include "pong_server.h"
 // #include "pong_networking.h"
+#include "../src/game/pong_game.h"
 #include <stddef.h>
 #include <string.h>
 #include <stdio.h>
@@ -11,10 +12,6 @@
 #define PACKET_SEPARATOR "--"
 
 typedef unsigned char *byte_pointer;
-
-void here() {
-    printf("here\n");
-}
 
 void show_bytes(byte_pointer start, size_t len) {
     size_t i;
@@ -125,6 +122,17 @@ int main() {
     // print_list(head);
     // putchar('\n');
     // free_list(&head);
+
+    // vec2f p1 = {1, 1}, q1 = {10, 1};
+    // vec2f p2 = {1, 2}, q2 = {10, 2};
+    // vec2f p1 = {10, 0}, q1 = {0, 10};
+    // vec2f p2 = {0, 0}, q2 = {10, 10};
+    vec2f p1 = {-5, -5}, q1 = {0, 0};
+    vec2f p2 = {1, 1}, q2 = {10, 10};
+
+    printf("%d\n", do_intersect(&p1, &q1, &p2, &q2));
+
+
     return 0;
 }
 
